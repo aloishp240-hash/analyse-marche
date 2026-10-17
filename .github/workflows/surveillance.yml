@@ -1,0 +1,38 @@
+# Relais GitHub : calendrier des résultats, bilan de clôture, et alertes de séance quand le Mac est éteint.
+name: surveillance
+
+on:
+  schedule:
+    # Toutes les 5 min en semaine, 13h-22h55 UTC : couvre la séance US et le bilan, heure d'été comme d'hiver.
+    # Le script vérifie lui-même l'heure de New York et sort aussitôt hors séance.
+    - cron: "*/5 13-22 * * 1-5"
+  workflow_dispatch:
+
+concurrency:
+  group: surveillance
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: pip install -r requirements.txt
+      # Mémoire anti-doublon et caches du jour, conservés d'un lancement à l'autre
+      - uses: actions/cache@v4
+        with:
+          path: |
+            donnees
+            alertes
+          key: etat-${{ github.run_id }}
+          restore-keys: etat-
+      - run: python surveillance.py
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MAC_VU: ${{ vars.MAC_VU }}

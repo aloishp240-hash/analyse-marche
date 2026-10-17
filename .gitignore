@@ -1,0 +1,6 @@
+.env
+.venv/
+donnees/
+logs/
+alertes/
+__pycache__/

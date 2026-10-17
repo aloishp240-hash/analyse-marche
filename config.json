@@ -1,0 +1,18 @@
+{
+  "seuils": {
+    "variation_jour_atr": 1.5,
+    "variation_jour_min_pct": 2.0,
+    "variation_15min_atr": 0.75,
+    "variation_15min_min_pct": 1.0,
+    "gap_atr": 1.0,
+    "gap_min_pct": 2.0,
+    "volume_multiple": 2.5,
+    "macd_volume_min": 1.5,
+    "rsi_bas": 30,
+    "rsi_haut": 70,
+    "secteur_variation_atr": 1.0,
+    "secteur_variation_min_pct": 1.5,
+    "secteur_min_titres": 3
+  },
+  "delai_rappel_15min_minutes": 60
+}
