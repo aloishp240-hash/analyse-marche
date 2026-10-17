@@ -7,6 +7,11 @@ on:
     # Le script vérifie lui-même l'heure de New York et sort aussitôt hors séance.
     - cron: "*/5 13-22 * * 1-5"
   workflow_dispatch:
+    inputs:
+      test:
+        description: "Test : bilan et scan affichés dans le journal, sans envoi Telegram"
+        type: boolean
+        default: true
 
 concurrency:
   group: surveillance
@@ -31,8 +36,13 @@ jobs:
             alertes
           key: etat-${{ github.run_id }}
           restore-keys: etat-
-      - run: python surveillance.py
+      - if: ${{ !inputs.test }}
+        run: python surveillance.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           MAC_VU: ${{ vars.MAC_VU }}
+      - if: ${{ inputs.test }}
+        run: python surveillance.py --bilan --dry-run && python surveillance.py --force --dry-run
+        env:
+          MAC_VU: ""
