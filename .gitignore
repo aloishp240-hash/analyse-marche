@@ -4,3 +4,4 @@ donnees/
 logs/
 alertes/
 __pycache__/
+agent/en-attente.json

@@ -23,9 +23,14 @@ permissions:
 jobs:
   agent:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
+      # ref: main → l'état le plus récent, même pour un lancement resté en file d'attente derrière une session Claude.
+      # Sans identifiants enregistrés : Claude n'a aucun jeton GitHub à portée ; seule l'étape de commit en reçoit un.
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
@@ -39,7 +44,13 @@ jobs:
           restore-keys: court-terme-
       - run: npm install -g @anthropic-ai/claude-code@2.1.296
       - if: ${{ !inputs.test }}
-        run: python positions.py && python agent.py
+        run: python positions.py
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      # Lancé même si le suivi a échoué ; l'état est commité même si l'une des deux étapes a échoué.
+      - if: ${{ !cancelled() && !inputs.test }}
+        run: python agent.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -49,12 +60,18 @@ jobs:
       - if: ${{ inputs.test }}
         run: python positions.py --dry-run && python agent.py --force --dry-run
       # L'état du portefeuille, les notes et les sessions vivent dans agent/ : on les enregistre dans le dépôt.
-      - if: ${{ !inputs.test }}
+      - if: ${{ !cancelled() && !inputs.test }}
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add agent
           git diff --cached --quiet || {
             git commit -m "Agent court terme : mise à jour $(date -u +%F)"
-            git pull --rebase && git push
+            for essai in 1 2 3; do
+              git pull --rebase && git push && break
+              sleep 10
+            done
           }

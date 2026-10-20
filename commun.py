@@ -178,7 +178,11 @@ def envoyer_telegram(texte):
         courant += ligne
     morceaux.append(courant)
     for morceau in morceaux:
-        reponse = requests.post(f"https://api.telegram.org/bot{jeton}/sendMessage",
-                                data={"chat_id": chat, "text": morceau,
-                                      "disable_web_page_preview": True}, timeout=20)
-        reponse.raise_for_status()
+        try:
+            reponse = requests.post(f"https://api.telegram.org/bot{jeton}/sendMessage",
+                                    data={"chat_id": chat, "text": morceau,
+                                          "disable_web_page_preview": True}, timeout=20)
+            reponse.raise_for_status()
+        except requests.RequestException as erreur:
+            # Le message de requests contient l'URL, donc le jeton : il finirait dans les journaux publics
+            raise RuntimeError(f"Telegram indisponible : {str(erreur).replace(jeton, '***')}") from None

@@ -56,13 +56,13 @@ Mémoire d'une session à l'autre (200 lignes au plus). Lis-les au début de la 
 fin : candidats rejetés et pourquoi, titres à surveiller, leçon tirée d'une position fermée.
 
 ### Signal — `python outils/signal.py TICKER "justification"`
-Valide un candidat : le code enregistre l'ordre fictif et l'envoie sur Telegram avec ta justification (2 à 3 phrases,
-en français). Affiche « signal enregistré » ou « refusé : motif » (plafonds atteints, ticker hors candidats). Un refus
+Valide un candidat : le code calcule l'ordre fictif et le met en attente avec ta justification (2 à 3 phrases, en
+français). Il n'est enregistré et envoyé sur Telegram qu'à la fin de la session, si elle se termine normalement. Affiche « signal enregistré » ou « refusé : motif » (plafonds atteints, ticker hors candidats). Un refus
 est définitif pour la session : ne réessaie pas.
 
 ### Information — `python outils/info.py TICKER "texte"`
-Pour un titre **déjà en ordre ou en position** seulement : envoie `ℹ️ TICKER — texte` sur Telegram sans toucher au
-portefeuille. À réserver aux nouvelles qui changent le dossier (résultats avancés, enquête, rachat annoncé).
+Pour un titre **déjà en ordre ou en position** seulement : envoie `ℹ️ TICKER — texte` sur Telegram en fin de session,
+sans toucher au portefeuille. Les liens sont retirés et le texte limité à 400 caractères. À réserver aux nouvelles qui changent le dossier (résultats avancés, enquête, rachat annoncé).
 
 ## Fin de session
 

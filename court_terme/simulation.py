@@ -2,7 +2,8 @@
 
 Une barre : {"jour": date, "ouverture", "haut", "bas", "cloture", "terminee": bool}.
 Une barre non terminée (séance en cours) peut déclencher une entrée ou une sortie,
-mais ne fait avancer ni le compteur de séances ni traite_jusqu_au : la repasser ne rejoue rien.
+mais ne fait avancer ni le compteur de séances ni traite_jusqu_au, ni remonter le stop :
+la repasser ne rejoue rien.
 """
 
 
@@ -38,7 +39,8 @@ def _traiter_position(etat, pos, b, taux_eurusd, p):
     if sortie:
         return [_fermer(etat, pos, b["jour"], sortie[1], sortie[0], taux_eurusd)], True
     evts = []
-    if b["haut"] >= pos["prix_entree"] + p["remontee_stop_atr"] * pos["atr"] and pos["stop"] < pos["prix_entree"]:
+    # Sur une barre partielle, le plus bas peut précéder la hausse : le stop ne remonte qu'en fin de séance
+    if b["terminee"] and b["haut"] >= pos["prix_entree"] + p["remontee_stop_atr"] * pos["atr"] and pos["stop"] < pos["prix_entree"]:
         pos["stop"] = pos["prix_entree"]
         evts.append(_evenement("stop_remonte", pos, b["jour"], pos["stop"]))
     if b["terminee"]:

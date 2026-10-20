@@ -126,3 +126,14 @@ def test_ticker_sans_barre():
     e = etat([ordre()], [{**position(), "ticker": "BBB"}])
     avant = repr(e)
     assert avancer(e, {}, 1.0, p) == [] and repr(e) == avant
+
+
+def test_stop_remonte_seulement_en_fin_de_seance():
+    # Barre partielle : le plus bas (99) peut dater d'avant la hausse ; la rejouer ne doit pas sortir au stop remonté
+    e = etat([ordre()])
+    en_cours = barre(1, 101, 102.6, 99, 102, terminee=False)
+    assert [v["type"] for v in avancer(e, {"AAA": [en_cours]}, 1.0, p)] == ["entree"]
+    assert avancer(e, {"AAA": [en_cours]}, 1.0, p) == []
+    assert e["positions"][0]["stop"] == 96.5
+    evts = avancer(e, {"AAA": [barre(1, 101, 102.6, 99, 102)]}, 1.0, p)
+    assert [v["type"] for v in evts] == ["stop_remonte"] and e["positions"][0]["stop"] == 99.5

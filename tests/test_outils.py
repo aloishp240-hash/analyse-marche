@@ -3,6 +3,7 @@ from datetime import date
 
 import pytest
 
+from court_terme import attente
 from outils import engouement, info, notes
 from outils import signal as outil_signal
 
@@ -22,11 +23,15 @@ def agent(tmp_path, monkeypatch):
     candidats.write_text(json.dumps({"jour": JOUR.isoformat(), "candidats": [candidat("AAA")]}))
     for module in (outil_signal, info):
         monkeypatch.setattr(module, "ETAT", etat)
-        monkeypatch.setattr(module, "envoyer_telegram", envois.append)
+        monkeypatch.setattr(module, "EN_ATTENTE", tmp_path / "en-attente.json")
     monkeypatch.setattr(outil_signal, "CANDIDATS", candidats)
     monkeypatch.setattr(outil_signal, "taux_eurusd", lambda: 1.0)
     monkeypatch.setattr(outil_signal, "aujourd_hui", lambda: JOUR)
     return etat, envois
+
+
+def en_attente(etat):
+    return attente.lire(etat.parent / "en-attente.json")
 
 
 def ecrire_etat(chemin, suivis):
@@ -40,7 +45,7 @@ def test_signal_refuse_hors_candidats(agent, capsys):
     etat, envois = agent
     outil_signal.main(["ZZZ", "belle tendance"])
     assert "refusé" in capsys.readouterr().out
-    assert envois == [] and not etat.exists()
+    assert en_attente(etat)["messages"] == [] and not etat.exists()
 
 
 def test_signal_refuse_au_plafond(agent, capsys):
@@ -49,16 +54,21 @@ def test_signal_refuse_au_plafond(agent, capsys):
     avant = etat.read_text()
     outil_signal.main(["AAA", "belle tendance"])
     assert "refusé" in capsys.readouterr().out
-    assert envois == [] and etat.read_text() == avant
+    assert en_attente(etat)["messages"] == [] and etat.read_text() == avant
 
 
-def test_signal_accepte(agent, capsys):
+def test_signal_mis_en_attente(agent, capsys):
+    # Rien n'est envoyé ni enregistré pendant la session : agent.py applique les signaux si elle réussit
     etat, envois = agent
     outil_signal.main(["AAA", "Tendance intacte."])
     assert "signal enregistré" in capsys.readouterr().out
-    ordre = json.loads(etat.read_text())["ordres"][0]
+    assert envois == [] and not etat.exists()
+    attendu = en_attente(etat)
+    ordre = attendu["etat"]["ordres"][0]
     assert ordre["ticker"] == "AAA" and ordre["entree"] == 99.5 and ordre["date_signal"] == "2026-10-20"
-    assert len(envois) == 1 and "AAA" in envois[0] and "Tendance intacte." in envois[0]
+    assert len(attendu["messages"]) == 1 and "Tendance intacte." in attendu["messages"][0]
+    outil_signal.main(["AAA", "Encore."])                  # le second signal voit le premier
+    assert "refusé" in capsys.readouterr().out and len(en_attente(etat)["etat"]["ordres"]) == 1
 
 
 def test_signal_refuse_candidats_perimes(agent, capsys, monkeypatch):
@@ -71,9 +81,11 @@ def test_info_refuse_ticker_non_suivi(agent, capsys):
     etat, envois = agent
     ecrire_etat(etat, ["AAA"])
     info.main(["ZZZ", "résultats avancés"])
-    assert "refusé" in capsys.readouterr().out and envois == []
-    info.main(["AAA", "résultats avancés"])
-    assert envois == ["ℹ️ AAA — résultats avancés"]
+    assert "refusé" in capsys.readouterr().out and en_attente(etat)["messages"] == []
+    info.main(["AAA", "résultats avancés, voir https://exemple.com/x " + "a" * 600])
+    message = en_attente(etat)["messages"][0]
+    assert envois == [] and message.startswith("ℹ️ AAA — résultats avancés")
+    assert "http" not in message and len(message) <= 420
 
 
 def test_notes_tronquees(tmp_path, monkeypatch):

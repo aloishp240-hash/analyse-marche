@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Valide un candidat du jour : ordre fictif calculé par le code, enregistré et annoncé sur Telegram.
+"""Valide un candidat du jour : ordre fictif calculé par le code, mis en attente jusqu'à la fin de la session.
+
+agent.py l'enregistre et l'annonce sur Telegram seulement si la session Claude réussit.
 
 Usage : python outils/signal.py TICKER "justification"
 Aucun prix n'est accepté : entrée, stop et objectif viennent des candidats du jour.
@@ -13,14 +15,16 @@ from pathlib import Path
 if __name__ == "__main__":  # la racine du dépôt remplace outils/, où ce fichier masquerait le module standard
     sys.path[0] = str(Path(__file__).resolve().parents[1])
 
-from commun import NY, charger_config, envoyer_telegram
+from commun import NY, charger_config
+from court_terme import attente
 from court_terme.messages import message_signal
-from court_terme.portefeuille import ajouter_ordre, charger, sauver
+from court_terme.portefeuille import ajouter_ordre, charger
 from positions import taux_eurusd
 
 AGENT = Path(__file__).resolve().parents[1] / "agent"
 CANDIDATS = AGENT / "candidats-du-jour.json"
 ETAT = AGENT / "positions.json"
+EN_ATTENTE = AGENT / "en-attente.json"
 
 
 def aujourd_hui():
@@ -47,7 +51,7 @@ def main(argv=None):
         return 0
 
     p = charger_config()["court_terme"]
-    etat = charger(ETAT, p)
+    etat = attente.lire(EN_ATTENTE)["etat"] or charger(ETAT, p)
     try:
         taux = taux_eurusd()
         ordre = ajouter_ordre(etat, candidat, candidat.get("industrie"), args.justification.strip(),
@@ -58,13 +62,9 @@ def main(argv=None):
     except Exception as erreur:
         print(f"refusé : taux EUR/USD indisponible ({erreur})")
         return 0
-    sauver(etat, ETAT)
-    try:
-        envoyer_telegram(message_signal(ordre, taux))
-    except Exception as erreur:
-        print(f"signal enregistré, mais Telegram indisponible : {erreur}")
-        return 0
-    print(f"signal enregistré : {ticker}, {ordre['quantite']} actions, entrée {ordre['entree']:.2f} $")
+    attente.ajouter(EN_ATTENTE, message_signal(ordre, taux), etat)
+    print(f"signal enregistré : {ticker}, {ordre['quantite']} actions, entrée {ordre['entree']:.2f} $ "
+          "(envoyé sur Telegram à la fin de la session)")
     return 0
 
 

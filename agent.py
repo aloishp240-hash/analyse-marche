@@ -9,6 +9,7 @@ Usage : python agent.py [--force] [--dry-run]
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, time
@@ -16,19 +17,24 @@ from pathlib import Path
 
 from commun import INDICE, NY, charger_config, charger_tickers, envoyer_telegram, fondamentaux, \
     historique_journalier, prochains_resultats
+from court_terme import attente
 from court_terme.messages import LIBELLES
-from court_terme.portefeuille import capital_courant, charger
+from court_terme.portefeuille import capital_courant, charger, sauver
 from court_terme.strategie import reperer
 
 AGENT = Path(__file__).resolve().parent / "agent"
 ETAT = AGENT / "positions.json"
 CANDIDATS = AGENT / "candidats-du-jour.json"
 CONSIGNE = AGENT / "consigne.md"
+EN_ATTENTE = AGENT / "en-attente.json"
 SESSIONS = AGENT / "sessions"
 HEURE_AGENT = time(16, 45)
 TENTATIVES_MAX = 2
 DUREE_MAX_S = 1200
 OUTILS = ["candidats", "actualites", "engouement", "reddit", "notes", "signal", "info"]
+# Outils accessibles sans autorisation en mode -p : retirés pour qu'un contenu web malveillant ne lise ni .git/config
+# (jeton GitHub) ni aucun fichier, et ne modifie pas le dépôt.
+INTERDITS = ["Read", "Glob", "Grep", "Edit", "Write", "NotebookEdit", "Task"]
 
 
 def doit_lancer(maintenant, derniere_seance, session_existe):
@@ -38,7 +44,12 @@ def doit_lancer(maintenant, derniere_seance, session_existe):
 def commande_claude(consigne):
     return ["claude", "-p", consigne, "--model", "sonnet", "--max-turns", "30", "--allowedTools",
             *[f"Bash(python outils/{outil}.py:*)" for outil in OUTILS], "Bash(python fiche.py:*)",
-            "WebSearch", "WebFetch", "Skill"]
+            "WebSearch", "WebFetch", "Skill", "--disallowedTools", *INTERDITS]
+
+
+def environnement_claude():
+    """Environnement du processus claude, sans les secrets Telegram : les messages partent d'agent.py."""
+    return {k: v for k, v in os.environ.items() if not k.startswith("TELEGRAM_")}
 
 
 def _echecs(jour):
@@ -57,26 +68,47 @@ def ecrire_session(jour, texte):
     (SESSIONS / f"{jour.isoformat()}.md").write_text(f"# Session du {jour.isoformat()}\n\n{texte.strip()}\n")
 
 
-def lancer_session(consigne, jour):
-    """Session Claude ; en cas d'échec, une nouvelle tentative au passage suivant, puis abandon pour la journée."""
+def envoyer(texte):
     try:
-        resultat = subprocess.run(commande_claude(consigne), timeout=DUREE_MAX_S, capture_output=True, text=True)
+        envoyer_telegram(texte)
+    except Exception as exception:
+        print(f"Échec de l'envoi Telegram : {exception}", file=sys.stderr)
+
+
+def appliquer_attente():
+    """Enregistre les ordres validés pendant la session et envoie ses messages."""
+    en_attente = attente.lire(EN_ATTENTE)
+    if en_attente["etat"]:
+        sauver(en_attente["etat"], ETAT)
+    for message in en_attente["messages"]:
+        envoyer(message)
+    EN_ATTENTE.unlink(missing_ok=True)
+
+
+def lancer_session(consigne, jour):
+    """Session Claude ; ses signaux ne sont appliqués que si elle réussit.
+
+    En cas d'échec, rien n'est envoyé : nouvelle tentative au passage suivant, puis abandon pour la journée.
+    """
+    EN_ATTENTE.unlink(missing_ok=True)
+    try:
+        resultat = subprocess.run(commande_claude(consigne), timeout=DUREE_MAX_S, capture_output=True, text=True,
+                                  env=environnement_claude())
         code, erreur = resultat.returncode, resultat.stderr
     except (subprocess.TimeoutExpired, OSError) as exception:
         code, erreur = None, str(exception)
     if code == 0:
+        appliquer_attente()
         ecrire_session(jour, resultat.stdout)
         return
+    EN_ATTENTE.unlink(missing_ok=True)
     print(f"Session Claude échouée (code {code}) :\n{erreur[-2000:]}", file=sys.stderr)
     echecs = _echecs(jour)
     SESSIONS.mkdir(parents=True, exist_ok=True)
     nombre = (int(echecs.read_text() or 0) if echecs.exists() else 0) + 1
     echecs.write_text(str(nombre))
     suite = "nouvelle tentative dans 5 min" if nombre < TENTATIVES_MAX else "aucun signal aujourd'hui"
-    try:
-        envoyer_telegram(f"⚠️ AGENT COURT TERME — session échouée (code {code}), {suite}")
-    except Exception as exception:
-        print(f"Échec de l'envoi Telegram : {exception}", file=sys.stderr)
+    envoyer(f"⚠️ AGENT COURT TERME — session échouée (code {code}), aucun signal envoyé ; {suite}")
 
 
 def resume_portefeuille(etat):
@@ -125,10 +157,7 @@ def main():
         print(texte)
         if not args.dry_run:
             ecrire_session(jour, texte)
-            try:
-                envoyer_telegram(f"🤖 AGENT COURT TERME — {texte}")
-            except Exception as exception:
-                print(f"Échec de l'envoi Telegram : {exception}", file=sys.stderr)
+            envoyer(f"🤖 AGENT COURT TERME — {texte}")
         return
 
     liste = ", ".join(f"{c['ticker']} ({LIBELLES.get(c['configuration'])})" for c in candidats) or "aucun"

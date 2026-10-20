@@ -1,3 +1,4 @@
+import json
 import subprocess
 from datetime import date, datetime
 
@@ -23,9 +24,7 @@ def test_commande_claude_sans_shell_libre():
 
 
 def test_session_echouee(tmp_path, monkeypatch):
-    envois = []
-    monkeypatch.setattr(agent, "SESSIONS", tmp_path)
-    monkeypatch.setattr(agent, "envoyer_telegram", envois.append)
+    envois = fichiers(tmp_path, monkeypatch)
     monkeypatch.setattr(agent.subprocess, "run",
                         lambda *a, **k: subprocess.CompletedProcess(a, 1, stdout="", stderr="quota atteint"))
     agent.lancer_session("consigne", MARDI)
@@ -37,9 +36,59 @@ def test_session_echouee(tmp_path, monkeypatch):
 
 
 def test_session_reussie(tmp_path, monkeypatch):
-    monkeypatch.setattr(agent, "SESSIONS", tmp_path)
+    fichiers(tmp_path, monkeypatch)
     monkeypatch.setattr(agent.subprocess, "run",
                         lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout="AAA : ✅ validé — ok", stderr=""))
     agent.lancer_session("consigne", MARDI)
     assert "AAA : ✅ validé" in (tmp_path / "2026-10-20.md").read_text()
     assert agent.session_faite(MARDI)
+
+
+def fichiers(tmp_path, monkeypatch):
+    envois = []
+    for nom, chemin in (("SESSIONS", tmp_path), ("ETAT", tmp_path / "positions.json"),
+                        ("EN_ATTENTE", tmp_path / "en-attente.json")):
+        monkeypatch.setattr(agent, nom, chemin)
+    monkeypatch.setattr(agent, "envoyer_telegram", envois.append)
+    return envois
+
+
+def session_qui_signale(code):
+    """Faux claude -p : met un signal en attente comme outils/signal.py, puis se termine avec `code`."""
+    def run(*a, **k):
+        etat = {"capital_initial": 3000, "debut": "2026-10-20", "ordres": [{"ticker": "AAA"}], "positions": [],
+                "fermees": []}
+        agent.EN_ATTENTE.write_text(json.dumps({"etat": etat, "messages": ["🟢 SIGNAL AAA"]}))
+        return subprocess.CompletedProcess(a, code, stdout="AAA : ✅ validé — ok", stderr="")
+    return run
+
+
+def test_signaux_appliques_si_session_reussie(tmp_path, monkeypatch):
+    envois = fichiers(tmp_path, monkeypatch)
+    monkeypatch.setattr(agent.subprocess, "run", session_qui_signale(0))
+    agent.lancer_session("consigne", MARDI)
+    assert json.loads(agent.ETAT.read_text())["ordres"] == [{"ticker": "AAA"}]
+    assert envois == ["🟢 SIGNAL AAA"] and not agent.EN_ATTENTE.exists()
+
+
+def test_aucun_signal_si_session_echouee(tmp_path, monkeypatch):
+    envois = fichiers(tmp_path, monkeypatch)
+    monkeypatch.setattr(agent.subprocess, "run", session_qui_signale(1))
+    agent.lancer_session("consigne", MARDI)
+    assert not agent.ETAT.exists() and not agent.EN_ATTENTE.exists()
+    assert len(envois) == 1 and "session échouée" in envois[0]
+
+
+def test_claude_sans_lecture_de_fichiers_ni_secrets(tmp_path, monkeypatch):
+    # Un contenu web malveillant ne doit pouvoir lire ni .git/config ni les secrets Telegram
+    commande = agent.commande_claude("consigne")
+    interdits = commande[commande.index("--disallowedTools") + 1:]
+    assert {"Read", "Glob", "Grep", "Edit", "Write"} <= set(interdits)
+    fichiers(tmp_path, monkeypatch)
+    monkeypatch.setenv("TELEGRAM_TOKEN", "123:SECRET")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "jeton")
+    appels = []
+    monkeypatch.setattr(agent.subprocess, "run",
+                        lambda *a, **k: appels.append(k) or subprocess.CompletedProcess(a, 0, stdout="", stderr=""))
+    agent.lancer_session("consigne", MARDI)
+    assert "TELEGRAM_TOKEN" not in appels[0]["env"] and appels[0]["env"]["CLAUDE_CODE_OAUTH_TOKEN"] == "jeton"
