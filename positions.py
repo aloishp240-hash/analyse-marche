@@ -69,6 +69,11 @@ def dernier_cours(symbole, periode="5d"):
     return clotures[symbole].dropna() if isinstance(clotures, pd.DataFrame) else clotures.dropna()
 
 
+def taux_eurusd():
+    """Dollars pour un euro, à la dernière clôture."""
+    return float(dernier_cours(DEVISE).iloc[-1])
+
+
 def perf_indice(debut):
     """Performance de QQQ sur la semaine (depuis la clôture du vendredi précédent) et depuis `debut`."""
     clotures = dernier_cours(INDICE, "1y")
@@ -107,7 +112,7 @@ def main():
 
     suivis = sorted({e["ticker"] for e in etat["ordres"] + etat["positions"]})
     barres = barres_du_jour(suivis, maintenant) if suivis else {}
-    taux = float(dernier_cours(DEVISE).iloc[-1])
+    taux = taux_eurusd()
     for evt in avancer(etat, barres, taux, p):
         envoyer(message_evenement(evt), args.dry_run)
 
