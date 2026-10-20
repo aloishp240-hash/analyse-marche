@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backtest court terme</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --surface: #fcfcfb; --carte: #ffffff; --bord: #e4e3de; --texte: #0b0b0b; --texte-2: #52514e;
+    --serie-1: #2a78d6; --serie-2: #eb6834; --bon: #0a7f0a; --mauvais: #c03030; --grille: #ecebe7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: #1a1a19; --carte: #232322; --bord: #3a3936; --texte: #f0efec; --texte-2: #c3c2b7;
+      --serie-1: #3987e5; --serie-2: #d95926; --bon: #3fbf3f; --mauvais: #ef6b6b; --grille: #2f2f2d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface); color: var(--texte);
+         font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 32px 0 12px; }
+  .sous-titre, .note { color: var(--texte-2); margin: 0; }
+  .note { font-size: 13px; margin-top: 8px; }
+  .onglets { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0 0; }
+  .onglets button { font: inherit; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+                    border: 1px solid var(--bord); background: var(--carte); color: var(--texte); }
+  .onglets button[aria-pressed="true"] { background: var(--texte); color: var(--surface); border-color: var(--texte); }
+  .tuiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 16px; }
+  .tuile { background: var(--carte); border: 1px solid var(--bord); border-radius: 10px; padding: 12px 14px; }
+  .tuile .libelle { color: var(--texte-2); font-size: 13px; }
+  .tuile .chiffre { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tuile .detail { color: var(--texte-2); font-size: 13px; }
+  .carte { background: var(--carte); border: 1px solid var(--bord); border-radius: 10px; padding: 16px; }
+  .graphique { position: relative; height: 320px; }
+  .legende { display: flex; gap: 16px; font-size: 13px; color: var(--texte-2); margin-bottom: 8px; }
+  .legende span::before { content: ""; display: inline-block; width: 14px; height: 2px; margin-right: 6px;
+                          vertical-align: middle; background: var(--c); }
+  .defile { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bord); white-space: nowrap; }
+  th { color: var(--texte-2); font-weight: 500; font-size: 13px; }
+  td.n, th.n { text-align: right; }
+  tbody tr.cliquable { cursor: pointer; }
+  tbody tr.cliquable:hover, tbody tr.choisie { background: var(--grille); }
+  .bon { color: var(--bon); } .mauvais { color: var(--mauvais); }
+  .vide { color: var(--texte-2); padding: 12px 0; }
+  details { margin-top: 12px; } summary { cursor: pointer; color: var(--texte-2); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Backtest court terme</h1>
+  <p class="sous-titre" id="sous-titre"></p>
+  <p class="note">Titres du Nasdaq 100 choisis par les règles de l'agent, sans validation par Claude ; QQQ sert seulement
+    de comparaison, avec le même capital de départ. Composition actuelle de l'indice appliquée au passé.</p>
+
+  <h2>Résumé par période</h2>
+  <div class="carte defile">
+    <table>
+      <thead><tr><th>Période</th><th class="n">Signaux</th><th class="n">Positions fermées</th><th class="n">Réussite</th>
+        <th class="n">Réalisé</th><th class="n">Valeur finale</th><th class="n">Portefeuille</th><th class="n">QQQ</th></tr></thead>
+      <tbody id="resume"></tbody>
+    </table>
+  </div>
+
+  <div class="onglets" id="onglets" role="group" aria-label="Période affichée"></div>
+  <div class="tuiles" id="tuiles"></div>
+
+  <h2>Portefeuille face à QQQ</h2>
+  <div class="carte">
+    <div class="legende"><span style="--c: var(--serie-1)">Portefeuille</span><span style="--c: var(--serie-2)">QQQ (même capital)</span></div>
+    <div class="graphique"><canvas id="courbe" aria-label="Valeur du portefeuille et de QQQ par séance"></canvas></div>
+    <details><summary>Voir les valeurs par séance</summary><div class="defile"><table>
+      <thead><tr><th>Séance</th><th class="n">Portefeuille</th><th class="n">QQQ</th></tr></thead>
+      <tbody id="valeurs"></tbody></table></div></details>
+  </div>
+
+  <h2>Positions fermées</h2>
+  <div class="carte defile" id="fermees"></div>
+
+  <h2>Positions encore ouvertes</h2>
+  <div class="carte defile" id="ouvertes"></div>
+</main>
+
+<script>
+const DONNEES = __DONNEES__;
+const MOTIFS = { objectif: "Objectif atteint", stop: "Stop touché", temps: "Durée max" };
+const euros = (v, signe) => v == null ? "—" :
+  (signe && v > 0 ? "+" : "") + v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+const prix = v => v == null ? "—" : v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " $";
+const pct = v => (v > 0 ? "+" : "") + v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " %";
+const ton = v => v > 0 ? "bon" : v < 0 ? "mauvais" : "";
+const jour = iso => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+const perf = (p, cle) => { const d = p.courbe.at(-1); return d ? (d[cle] / p.capital_initial - 1) * 100 : 0; };
+const echapper = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+const periodes = DONNEES.periodes;
+document.getElementById("sous-titre").textContent =
+  `Configurations ${DONNEES.configurations} · ${periodes.length} période${periodes.length > 1 ? "s" : ""} · ` +
+  `capital fictif de ${euros(periodes[0]?.capital_initial)} par période`;
+
+let choisie = periodes.length - 1, graphique;
+
+function resume() {
+  document.getElementById("resume").innerHTML = periodes.map((p, i) => {
+    const s = p.stats, fin = p.courbe.at(-1)?.valeur;
+    return `<tr class="cliquable${i === choisie ? " choisie" : ""}" data-i="${i}">
+      <td>${jour(p.debut)} → ${jour(p.fin)}</td><td class="n">${p.signaux}</td><td class="n">${s.nombre}</td>
+      <td class="n">${s.taux_reussite == null ? "—" : s.taux_reussite + " %"}</td>
+      <td class="n ${ton(s.resultat_total)}">${euros(s.resultat_total, true)}</td><td class="n">${euros(fin)}</td>
+      <td class="n ${ton(perf(p, "valeur"))}">${pct(perf(p, "valeur"))}</td>
+      <td class="n ${ton(perf(p, "qqq"))}">${pct(perf(p, "qqq"))}</td></tr>`;
+  }).join("");
+  document.querySelectorAll("#resume tr").forEach(tr => tr.onclick = () => choisir(+tr.dataset.i));
+}
+
+function onglets() {
+  document.getElementById("onglets").innerHTML = periodes.map((p, i) =>
+    `<button type="button" aria-pressed="${i === choisie}" data-i="${i}">${jour(p.debut)} → ${jour(p.fin)}</button>`).join("");
+  document.querySelectorAll("#onglets button").forEach(b => b.onclick = () => choisir(+b.dataset.i));
+}
+
+function tuiles(p) {
+  const s = p.stats, ecart = perf(p, "valeur") - perf(p, "qqq");
+  const t = [
+    ["Valeur finale", euros(p.courbe.at(-1)?.valeur), `${pct(perf(p, "valeur"))} sur la période`],
+    ["Face à QQQ", `<span class="${ton(ecart)}">${pct(ecart)}</span>`, `QQQ ${pct(perf(p, "qqq"))}`],
+    ["Taux de réussite", s.taux_reussite == null ? "—" : s.taux_reussite + " %", `${s.nombre} positions fermées`],
+    ["Espérance par position", `<span class="${ton(s.esperance)}">${euros(s.esperance, true)}</span>`,
+      `gain moyen ${euros(s.gain_moyen, true)} · perte moyenne ${euros(s.perte_moyenne, true)}`],
+    ["Signaux", p.signaux, `${p.refus} refusés par les plafonds`],
+  ];
+  document.getElementById("tuiles").innerHTML = t.map(([l, c, d]) =>
+    `<div class="tuile"><div class="libelle">${l}</div><div class="chiffre">${c}</div><div class="detail">${d}</div></div>`).join("");
+}
+
+function tableau(id, lignes, colonnes, vide) {
+  document.getElementById(id).innerHTML = lignes.length ? `<table><thead><tr>${colonnes.map(([t, , n]) =>
+    `<th${n ? ' class="n"' : ""}>${t}</th>`).join("")}</tr></thead><tbody>${lignes.map(l =>
+    `<tr>${colonnes.map(([, f, n]) => `<td${n ? ' class="n"' : ""}>${f(l)}</td>`).join("")}</tr>`).join("")}</tbody></table>`
+    : `<p class="vide">${vide}</p>`;
+}
+
+function positions(p) {
+  tableau("fermees", p.fermees, [
+    ["Titre", f => `<strong>${echapper(f.ticker)}</strong>`], ["Config.", f => echapper(f.configuration)],
+    ["Entrée", f => jour(f.date_entree)], ["Prix d'entrée", f => prix(f.prix_entree), 1],
+    ["Sortie", f => jour(f.date_sortie)], ["Prix de sortie", f => prix(f.prix_sortie), 1],
+    ["Motif", f => MOTIFS[f.motif] ?? echapper(f.motif)],
+    ["Résultat", f => `<span class="${ton(f.resultat_eur)}">${euros(f.resultat_eur, true)}</span>`, 1],
+  ], "Aucune position fermée sur cette période.");
+  tableau("ouvertes", p.ouvertes, [
+    ["Titre", o => `<strong>${echapper(o.ticker)}</strong>`], ["Entrée", o => jour(o.date_entree)],
+    ["Prix d'entrée", o => prix(o.prix_entree), 1], ["Dernier cours", o => prix(o.cours), 1],
+    ["Stop initial", o => prix(o.stop_initial), 1], ["Objectif", o => prix(o.objectif), 1],
+    ["Quantité", o => o.quantite, 1],
+  ], "Aucune position ouverte en fin de période.");
+}
+
+function courbe(p) {
+  document.getElementById("valeurs").innerHTML = p.courbe.map(d =>
+    `<tr><td>${jour(d.jour)}</td><td class="n">${euros(d.valeur)}</td><td class="n">${euros(d.qqq)}</td></tr>`).join("");
+  const css = getComputedStyle(document.documentElement), v = n => css.getPropertyValue(n).trim();
+  if (graphique) graphique.destroy();
+  const serie = (label, cle, couleur) => ({ label, data: p.courbe.map(d => d[cle]), borderColor: v(couleur),
+    backgroundColor: v(couleur), borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0 });
+  graphique = new Chart(document.getElementById("courbe"), {
+    type: "line",
+    data: { labels: p.courbe.map(d => jour(d.jour)),
+            datasets: [serie("Portefeuille", "valeur", "--serie-1"), serie("QQQ (même capital)", "qqq", "--serie-2")] },
+    options: {
+      maintainAspectRatio: false, animation: false, interaction: { mode: "index", intersect: false },
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: c => `${c.dataset.label} : ${euros(c.parsed.y)}` } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: v("--texte-2"), maxRotation: 0, autoSkipPadding: 16 } },
+        y: { grid: { color: v("--grille") }, border: { display: false },
+             ticks: { color: v("--texte-2"), callback: y => y.toLocaleString("fr-FR") + " €" } },
+      },
+    },
+  });
+}
+
+function choisir(i) {
+  choisie = i;
+  const p = periodes[i];
+  resume(); onglets(); tuiles(p); courbe(p); positions(p);
+}
+
+if (periodes.length) choisir(choisie);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => periodes.length && courbe(periodes[choisie]));
+</script>
+</body>
+</html>
