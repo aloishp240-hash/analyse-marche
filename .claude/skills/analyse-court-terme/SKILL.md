@@ -51,6 +51,14 @@ candidats.
 Discussions de la semaine sur r/stocks, r/wallstreetbets et r/investing : titre, score, commentaires, extrait.
 Seulement si l'engouement est inhabituel ou si les actualités évoquent une polémique.
 
+### Paris Polymarket — `python outils/polymarket.py "RECHERCHE"`
+Ce que les parieurs anticipent, en argent réel : probabilité de chaque issue, variation sur 7 jours, volume (paris de
+moins de 1 000 $ écartés). La recherche accepte un ticker (`NVDA`), un nom de société (`Tesla`) ou un thème
+macro (`Fed`, `recession`, `tariffs`). Utile quand un candidat a des résultats, une décision ou un procès proches,
+ou pour jauger le climat macro avant de valider des cassures. Une probabilité qui bascule fortement sur 7 jours
+contre le titre est une raison de rejeter. Les paris sur le cours lui-même (« What will NVDA hit ») ne servent qu'à
+situer l'humeur, jamais à fixer un niveau.
+
 ### Notes — `python outils/notes.py lire` / `python outils/notes.py ajouter "texte"`
 Mémoire d'une session à l'autre (200 lignes au plus). Lis-les au début de la session ; ajoute une note courte à la
 fin : candidats rejetés et pourquoi, titres à surveiller, leçon tirée d'une position fermée.

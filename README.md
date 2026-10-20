@@ -26,7 +26,7 @@ Configuration : `GITHUB_DEPOT=compte/depot` dans `.env`, secrets `TELEGRAM_TOKEN
 Signaux d'entrée, d'objectif et de stop sur un portefeuille **fictif** de 3 000 €, validés par une session Claude (abonnement, sans API payante). Aucun ordre réel n'est passé.
 
 - `positions.py` : simule les exécutions des ordres et positions fictifs toutes les 5 min, envoie les entrées et sorties sur Telegram, et le bilan du vendredi après 16h15 New York.
-- `agent.py` : après 16h45 New York, repère les candidats de la stratégie (`court_terme/`), puis lance `claude -p` avec la consigne `agent/consigne.md` et le skill `.claude/skills/analyse-court-terme`. Claude n'a accès qu'aux scripts de `outils/` (actualités, engouement ApeWisdom, Reddit, notes, signal, info), à `fiche.py` et à la recherche web. Deux échecs dans la journée : pas de signal ce jour-là, et un message Telegram le dit.
+- `agent.py` : après 16h45 New York, repère les candidats de la stratégie (`court_terme/`), puis lance `claude -p` avec la consigne `agent/consigne.md` et le skill `.claude/skills/analyse-court-terme`. Claude n'a accès qu'aux scripts de `outils/` (actualités, engouement ApeWisdom, Reddit, paris Polymarket, notes, signal, info), à `fiche.py` et à la recherche web. Deux échecs dans la journée : pas de signal ce jour-là, et un message Telegram le dit.
 - `backtest.py` : rejoue la stratégie sans Claude sur l'historique (`.venv/bin/python backtest.py`).
 
 L'état vit dans `agent/` (`positions.json`, `notes.md`, `sessions/AAAA-MM-JJ.md`) et le workflow `.github/workflows/court-terme.yml` le commite sur `main` : faire `git pull` avant de travailler sur le Mac.

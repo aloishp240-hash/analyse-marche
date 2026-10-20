@@ -31,7 +31,7 @@ SESSIONS = AGENT / "sessions"
 HEURE_AGENT = time(16, 45)
 TENTATIVES_MAX = 2
 DUREE_MAX_S = 1200
-OUTILS = ["candidats", "actualites", "engouement", "reddit", "notes", "signal", "info"]
+OUTILS = ["candidats", "actualites", "engouement", "reddit", "polymarket", "notes", "signal", "info"]
 # Outils accessibles sans autorisation en mode -p : retirés pour qu'un contenu web malveillant ne lise ni .git/config
 # (jeton GitHub) ni aucun fichier, et ne modifie pas le dépôt.
 INTERDITS = ["Read", "Glob", "Grep", "Edit", "Write", "NotebookEdit", "Task"]

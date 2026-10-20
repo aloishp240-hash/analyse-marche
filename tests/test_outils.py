@@ -4,7 +4,7 @@ from datetime import date
 import pytest
 
 from court_terme import attente
-from outils import engouement, info, notes
+from outils import engouement, info, notes, polymarket
 from outils import signal as outil_signal
 
 JOUR = date(2026, 10, 20)
@@ -126,3 +126,18 @@ def test_engouement_non_classe(monkeypatch, capsys):
     sortie = capsys.readouterr().out
     assert "NVDA" in sortie and "120" in sortie
     assert "ZZZ : non classé" in sortie and len(pages) == 2
+
+
+def test_polymarket_filtre_et_trie(monkeypatch, capsys):
+    marches = [{"groupItemTitle": "Pas de changement", "outcomePrices": '["0.86", "0.14"]', "oneWeekPriceChange": 0.07},
+               {"groupItemTitle": "Hausse de 25 pb", "outcomePrices": '["0.14", "0.86"]', "oneWeekPriceChange": 0.001},
+               {"groupItemTitle": "Clos", "outcomePrices": '["1", "0"]', "closed": True}]
+    evenements = [{"title": "Petit pari", "volume": 50, "markets": marches},
+                  {"title": "Décision de la Fed", "volume": 5_000_000, "endDate": "2026-10-29T00:00:00Z",
+                   "markets": marches}]
+    monkeypatch.setattr(polymarket.requests, "get", lambda url, **kwargs: Reponse({"events": evenements}))
+    polymarket.main(["Fed"])
+    sortie = capsys.readouterr().out
+    assert "Petit pari" not in sortie and "Clos" not in sortie
+    assert "Pas de changement : 86 % (+7 pts sur 7 j)" in sortie and "Hausse de 25 pb : 14 %\n" in sortie
+    assert sortie.index("Pas de changement") < sortie.index("Hausse")
