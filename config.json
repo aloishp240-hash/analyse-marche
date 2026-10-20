@@ -14,5 +14,31 @@
     "secteur_variation_min_pct": 1.5,
     "secteur_min_titres": 3
   },
-  "delai_rappel_15min_minutes": 60
+  "delai_rappel_15min_minutes": 60,
+  "court_terme": {
+    "capital_initial": 3000,
+    "risque_pct": 1,
+    "plafond_position_pct": 20,
+    "positions_max": 5,
+    "par_industrie_max": 2,
+    "candidats_max": 5,
+    "configurations": {
+      "A": true,
+      "B": false
+    },
+    "rsi_a_min": 35,
+    "rsi_a_max": 45,
+    "proximite_mm_atr": 1,
+    "cassure_seances": 20,
+    "volume_cassure": 1.5,
+    "rsi_b_max": 75,
+    "seances_sans_resultats": 10,
+    "variation_max_atr": 2,
+    "entree_atr": 0.25,
+    "stop_atr": 1.5,
+    "objectif_atr": 3,
+    "remontee_stop_atr": 1.5,
+    "validite_ordre_seances": 3,
+    "stop_temporel_seances": 15
+  }
 }

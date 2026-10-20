@@ -60,15 +60,19 @@ def charger_tickers():
         raise
 
 
-def historique_journalier(tickers, cache=True):
-    """Clôtures, plus hauts, plus bas et volumes sur un an, hors séance du jour (cache quotidien)."""
+def historique_journalier(tickers, cache=True, inclure_jour=False):
+    """Clôtures, plus hauts, plus bas et volumes sur un an, hors séance du jour (cache quotidien).
+
+    inclure_jour=True garde la séance du jour (après la clôture) et ne passe pas par le cache."""
     aujourd_hui = datetime.now(NY).date()
     fichier = DONNEES / f"journalier-v2-{aujourd_hui}.pkl"
+    cache = cache and not inclure_jour
     if cache and fichier.exists():
         return pd.read_pickle(fichier)
     df = yf.download(tickers, period="1y", interval="1d", auto_adjust=False,
                      progress=False, threads=True)[["Close", "High", "Low", "Volume"]]
-    df = df[df.index.date < aujourd_hui]
+    if not inclure_jour:
+        df = df[df.index.date < aujourd_hui]
     if cache:
         DONNEES.mkdir(exist_ok=True)
         for ancien in DONNEES.glob("journalier-*.pkl"):
