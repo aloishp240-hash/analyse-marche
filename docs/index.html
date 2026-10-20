@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent court terme</title>
+<!-- Tableau de bord de l'agent court terme : lit en direct agent/ et docs/ sur la branche main du dépôt public. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+:root {
+  --fond: #f6f7f9; --carte: #fff; --texte: #1b1f24; --doux: #5b6470; --bord: #e2e5ea;
+  --accent: #2f6fdf; --vert: #1a8a4a; --rouge: #c8372d; --orange: #b86e00; --code: #f0f2f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --fond: #111418; --carte: #1a1e24; --texte: #e6e8eb; --doux: #9aa3ae; --bord: #2b313a;
+          --accent: #6ea0ff; --vert: #4cc27f; --rouge: #ff6b5e; --orange: #f0a73a; --code: #232830; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fond); color: var(--texte);
+       font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+header { padding: 20px 16px 0; max-width: 1100px; margin: 0 auto; }
+h1 { font-size: 22px; margin: 0 0 2px; }
+.sous-titre { color: var(--doux); font-size: 13px; }
+nav { display: flex; gap: 4px; overflow-x: auto; margin-top: 16px; border-bottom: 1px solid var(--bord); }
+nav button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--doux);
+             padding: 10px 12px; font: inherit; cursor: pointer; white-space: nowrap; }
+nav button.actif { color: var(--texte); border-bottom-color: var(--accent); font-weight: 600; }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+section[hidden] { display: none; }
+.chiffres { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.chiffre { background: var(--carte); border: 1px solid var(--bord); border-radius: 10px; padding: 12px 14px; }
+.chiffre .libelle { color: var(--doux); font-size: 12px; }
+.chiffre .valeur { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+h2 { font-size: 16px; margin: 24px 0 10px; }
+.carte { background: var(--carte); border: 1px solid var(--bord); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+.carte h3 { margin: 0 0 6px; font-size: 15px; }
+.niveaux { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--doux); font-size: 13px;
+           font-variant-numeric: tabular-nums; }
+.niveaux b { color: var(--texte); font-weight: 600; }
+.badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid currentColor;
+         margin-left: 6px; vertical-align: 2px; }
+.vert { color: var(--vert); } .rouge { color: var(--rouge); } .orange { color: var(--orange); }
+details { margin-top: 8px; }
+summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+.justif { white-space: pre-wrap; font-size: 14px; margin-top: 6px; }
+.vide { color: var(--doux); font-style: italic; }
+.tableau { overflow-x: auto; background: var(--carte); border: 1px solid var(--bord); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bord); white-space: nowrap; }
+th { color: var(--doux); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+.sessions { display: grid; grid-template-columns: 180px 1fr; gap: 16px; }
+@media (max-width: 700px) { .sessions { grid-template-columns: 1fr; } }
+.liste-sessions { display: flex; flex-direction: column; gap: 4px; max-height: 70vh; overflow-y: auto; }
+@media (max-width: 700px) { .liste-sessions { flex-direction: row; overflow-x: auto; max-height: none; } }
+.liste-sessions button { text-align: left; background: var(--carte); border: 1px solid var(--bord); border-radius: 8px;
+                         padding: 8px 10px; font: inherit; color: var(--texte); cursor: pointer; white-space: nowrap; }
+.liste-sessions button.actif { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.md { background: var(--carte); border: 1px solid var(--bord); border-radius: 10px; padding: 4px 18px 12px; overflow-wrap: anywhere; }
+.md h1 { font-size: 19px; } .md h2 { font-size: 16px; border-top: 1px solid var(--bord); padding-top: 14px; }
+.md pre { background: var(--code); padding: 10px; border-radius: 8px; overflow-x: auto; font-size: 12px;
+          white-space: pre-wrap; max-height: 320px; overflow-y: auto; }
+.md code { background: var(--code); padding: 1px 4px; border-radius: 4px; font-size: 13px; }
+.md pre code { background: none; padding: 0; }
+.md blockquote { margin: 8px 0; padding: 6px 12px; border-left: 3px solid var(--accent); color: var(--texte);
+                 background: var(--code); border-radius: 0 8px 8px 0; }
+.md table { margin: 8px 0; } .md a { color: var(--accent); }
+.onglets-session { display: flex; gap: 8px; margin-bottom: 10px; }
+.onglets-session button { background: var(--carte); border: 1px solid var(--bord); border-radius: 99px; padding: 5px 12px;
+                          font: inherit; font-size: 13px; color: var(--texte); cursor: pointer; }
+.onglets-session button.actif { background: var(--accent); border-color: var(--accent); color: #fff; }
+.erreur { color: var(--rouge); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Agent court terme</h1>
+  <div class="sous-titre">Portefeuille <b>fictif</b> · données lues en direct sur GitHub (jusqu'à 5 min de retard) ·
+    <span id="maj">chargement…</span></div>
+  <nav id="nav">
+    <button data-onglet="portefeuille" class="actif">Portefeuille</button>
+    <button data-onglet="candidats">Candidats du jour</button>
+    <button data-onglet="sessions">Sessions de Claude</button>
+    <button data-onglet="notes">Notes de Claude</button>
+    <button data-onglet="strategie">Stratégie</button>
+    <button data-onglet="consigne">Consigne</button>
+    <button data-onglet="reglages">Réglages</button>
+  </nav>
+</header>
+<main>
+  <section id="portefeuille"></section>
+  <section id="candidats" hidden></section>
+  <section id="sessions" hidden>
+    <div class="sessions">
+      <div class="liste-sessions" id="liste-sessions"></div>
+      <div>
+        <div class="onglets-session" id="onglets-session" hidden>
+          <button data-vue="journal" class="actif">Journal (recherches et outils)</button>
+          <button data-vue="verdicts">Verdicts</button>
+        </div>
+        <div class="md" id="session"><p class="vide">Chargement…</p></div>
+      </div>
+    </div>
+  </section>
+  <section id="notes" hidden></section>
+  <section id="strategie" hidden></section>
+  <section id="consigne" hidden></section>
+  <section id="reglages" hidden></section>
+</main>
+<script>
+const DEPOT = "aloishp240-hash/analyse-marche";
+// ?source=http://localhost:8000 : lit une copie locale (agent/, docs/, config.json et api-sessions.json)
+const SOURCE = new URLSearchParams(location.search).get("source");
+const BRUT = SOURCE || `https://raw.githubusercontent.com/${DEPOT}/main`;
+const LISTE_SESSIONS = SOURCE ? `${SOURCE}/api-sessions.json`
+  : `https://api.github.com/repos/${DEPOT}/contents/agent/sessions?ref=main`;
+const LIBELLES = { A: "repli en tendance", B: "cassure" };
+const MOTIFS = { stop: "stop touché", objectif: "objectif atteint", temps: "stop temporel (15 séances)",
+                 decision: "vendue par Claude" };
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const md = texte => DOMPurify.sanitize(marked.parse(texte || ""));
+const usd = (x, d = 2) => x == null ? "—" : `${Number(x).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d })} $`;
+const eur = x => `${x >= 0 ? "+" : ""}${Number(x).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+const titre = e => e.nom && e.nom !== e.ticker ? `${esc(e.nom)} (${esc(e.ticker)})` : esc(e.ticker);
+const date = iso => iso ? new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }) : "—";
+
+async function lire(chemin, json = false) {
+  const r = await fetch(`${BRUT}/${chemin}`, { cache: "no-cache" });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`${chemin} : HTTP ${r.status}`);
+  return json ? r.json() : r.text();
+}
+
+function justification(texte, libelle = "Pourquoi Claude a acheté") {
+  if (!texte) return "";
+  const detail = esc(texte).replace(/\s*\b(Technique|Actualités|Contexte|Risque)\s*:\s*/g, "\n• <b>$1</b> : ").trim();
+  return `<details><summary>${libelle}</summary><div class="justif">${detail}</div></details>`;
+}
+
+function rendrePortefeuille(etat, config) {
+  const fermees = etat.fermees || [];
+  const realise = fermees.reduce((s, f) => s + (f.resultat_eur || 0), 0);
+  const capital = etat.capital_initial + realise;
+  const gagnants = fermees.filter(f => f.resultat_eur > 0).length;
+  const engage = [...etat.ordres, ...etat.positions].reduce((s, e) => s + e.quantite * (e.prix_entree ?? e.entree), 0);
+  let h = `<div class="chiffres">
+    <div class="chiffre"><div class="libelle">Capital réalisé</div><div class="valeur">${capital.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} €</div></div>
+    <div class="chiffre"><div class="libelle">Résultat depuis le début</div><div class="valeur ${realise >= 0 ? "vert" : "rouge"}">${eur(realise)}</div></div>
+    <div class="chiffre"><div class="libelle">Titres suivis</div><div class="valeur">${etat.ordres.length + etat.positions.length} / ${config.positions_max}</div></div>
+    <div class="chiffre"><div class="libelle">Montant engagé</div><div class="valeur">${usd(engage, 0)}</div></div>
+    <div class="chiffre"><div class="libelle">Trades fermés</div><div class="valeur">${fermees.length}${fermees.length ? ` · ${Math.round(100 * gagnants / fermees.length)} % gagnants` : ""}</div></div>
+  </div>
+  <div class="sous-titre">Départ : ${etat.capital_initial.toLocaleString("fr-FR")} €${etat.debut ? ` le ${date(etat.debut)}` : ", aucun signal encore"}. Le résultat ne compte que les trades fermés ;
+    les positions ouvertes ne sont pas réévaluées ici.</div>`;
+
+  h += `<h2>Positions ouvertes</h2>`;
+  h += etat.positions.length ? etat.positions.map(p => `<div class="carte">
+      <h3>${titre(p)}<span class="badge">${LIBELLES[p.configuration] || p.configuration}</span>
+        ${p.sortie_demandee ? `<span class="badge orange">vente décidée le ${date(p.sortie_demandee)}</span>` : ""}
+        ${p.stop > p.stop_initial ? `<span class="badge vert">stop remonté</span>` : ""}</h3>
+      <div class="niveaux"><span>Achat <b>${usd(p.prix_entree)}</b> le ${date(p.date_entree)}</span>
+        <span>Quantité <b>${p.quantite}</b></span><span>Stop <b class="rouge">${usd(p.stop)}</b></span>
+        <span>Objectif <b class="vert">${usd(p.objectif)}</b></span>
+        <span>Séance <b>${p.seances} / ${config.stop_temporel_seances}</b></span><span>${esc(p.industrie || "")}</span></div>
+      ${justification(p.justification)}${justification(p.justification_sortie, "Pourquoi Claude vend")}</div>`).join("")
+    : `<p class="vide">Aucune position ouverte.</p>`;
+
+  h += `<h2>Ordres d'achat en attente</h2>`;
+  h += etat.ordres.length ? etat.ordres.map(o => `<div class="carte">
+      <h3>${titre(o)}<span class="badge">${LIBELLES[o.configuration] || o.configuration}</span></h3>
+      <div class="niveaux"><span>Zone d'achat <b>${usd(o.entree - config.zone_entree_atr * o.atr)} – ${usd(o.entree + config.zone_entree_atr * o.atr)}</b></span>
+        <span>Prix visé <b>${usd(o.entree)}</b></span><span>Quantité <b>${o.quantite}</b></span>
+        <span>Stop <b class="rouge">${usd(o.stop)}</b></span><span>Objectif <b class="vert">${usd(o.objectif)}</b></span>
+        <span>Signal du ${date(o.date_signal)} · séance ${o.seances} / ${config.validite_ordre_seances}</span></div>
+      ${justification(o.justification)}</div>`).join("")
+    : `<p class="vide">Aucun ordre en attente.</p>`;
+
+  h += `<h2>Trades fermés</h2>`;
+  h += fermees.length ? `<div class="tableau"><table><thead><tr><th>Titre</th><th>Achat</th><th>Vente</th>
+      <th>Quantité</th><th>Prix achat</th><th>Prix vente</th><th>Motif</th><th>Résultat</th></tr></thead><tbody>
+      ${[...fermees].reverse().map(f => `<tr><td>${titre(f)}</td><td>${date(f.date_entree)}</td><td>${date(f.date_sortie)}</td>
+        <td>${f.quantite}</td><td>${usd(f.prix_entree)}</td><td>${usd(f.prix_sortie)}</td><td>${MOTIFS[f.motif] || esc(f.motif)}</td>
+        <td class="${f.resultat_eur >= 0 ? "vert" : "rouge"}">${eur(f.resultat_eur)}</td></tr>`).join("")}
+      </tbody></table></div>` : `<p class="vide">Aucun trade fermé pour l'instant.</p>`;
+  $("portefeuille").innerHTML = h;
+}
+
+function rendreCandidats(donnees) {
+  const liste = donnees?.candidats || [];
+  let h = `<p class="sous-titre">Titres repérés par le code le ${date(donnees?.jour)} et transmis à Claude, qui les valide ou les rejette
+    (voir l'onglet Sessions).</p>`;
+  h += liste.length ? `<div class="tableau"><table><thead><tr><th>Titre</th><th>Configuration</th><th>Industrie</th>
+      <th>Clôture</th><th>ATR</th><th>RSI</th><th>Force relative</th><th>Entrée</th><th>Stop</th><th>Objectif</th></tr></thead><tbody>
+      ${liste.map(c => `<tr><td>${titre(c)}</td><td>${LIBELLES[c.configuration] || c.configuration}</td><td>${esc(c.industrie || "—")}</td>
+        <td>${usd(c.cloture)}</td><td>${usd(c.atr)}</td><td>${c.rsi}</td><td>${c.force_relative > 0 ? "+" : ""}${c.force_relative} pts</td>
+        <td>${usd(c.entree)}</td><td>${usd(c.stop)}</td><td>${usd(c.objectif)}</td></tr>`).join("")}
+      </tbody></table></div>` : `<p class="vide">Aucun candidat ${donnees ? "ce jour-là" : "pour l'instant"}.</p>`;
+  $("candidats").innerHTML = h;
+}
+
+let sessions = {}, sessionActive = null, vue = "journal";
+
+async function chargerSessions() {
+  const r = await fetch(LISTE_SESSIONS, { cache: "no-cache" });
+  const fichiers = r.status === 404 ? [] : await r.json();
+  if (!Array.isArray(fichiers)) throw new Error("liste des sessions illisible (limite de l'API GitHub ?)");
+  for (const f of fichiers) {
+    const m = f.name.match(/^(\d{4}-\d{2}-\d{2})(-journal)?\.md$/);
+    if (m) (sessions[m[1]] ??= {})[m[2] ? "journal" : "verdicts"] = `agent/sessions/${f.name}`;
+  }
+  const jours = Object.keys(sessions).sort().reverse();
+  if (!jours.length) {
+    $("liste-sessions").innerHTML = "";
+    $("session").innerHTML = `<p class="vide">Aucune session Claude pour l'instant : elle n'a lieu que les jours où le code
+      trouve un candidat ou suit déjà un titre.</p>`;
+    return;
+  }
+  $("liste-sessions").innerHTML = jours.map(j => `<button data-jour="${j}">${date(j)}</button>`).join("");
+  $("onglets-session").hidden = false;
+  afficherSession(jours[0]);
+}
+
+async function afficherSession(jour) {
+  sessionActive = jour;
+  document.querySelectorAll("#liste-sessions button").forEach(b => b.classList.toggle("actif", b.dataset.jour === jour));
+  document.querySelectorAll("#onglets-session button").forEach(b => b.classList.toggle("actif", b.dataset.vue === vue));
+  const chemin = sessions[jour][vue];
+  if (!chemin) {
+    $("session").innerHTML = `<p class="vide">${vue === "journal" ? "Pas de journal pour cette session (créé à partir du 21 octobre 2026)."
+      : "Pas de verdict : la session a échoué."}</p>`;
+    return;
+  }
+  $("session").innerHTML = `<p class="vide">Chargement…</p>`;
+  const texte = await lire(chemin);
+  if (sessionActive === jour) $("session").innerHTML = md(texte);
+}
+
+$("liste-sessions").addEventListener("click", e => { if (e.target.dataset.jour) afficherSession(e.target.dataset.jour); });
+$("onglets-session").addEventListener("click", e => {
+  if (e.target.dataset.vue) { vue = e.target.dataset.vue; afficherSession(sessionActive); }
+});
+
+function rendreReglages(config) {
+  const lignes = Object.entries(config).map(([cle, val]) => `<tr><td><code>${esc(cle)}</code></td>
+    <td>${esc(typeof val === "object" ? JSON.stringify(val) : val)}</td></tr>`).join("");
+  $("reglages").innerHTML = `<p class="sous-titre">Section <code>court_terme</code> de <code>config.json</code>. Leur sens est
+    détaillé dans l'onglet Stratégie.</p><div class="tableau"><table><tbody>${lignes}</tbody></table></div>`;
+}
+
+document.getElementById("nav").addEventListener("click", e => {
+  const onglet = e.target.dataset.onglet;
+  if (!onglet) return;
+  document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("actif", b === e.target));
+  document.querySelectorAll("main > section").forEach(s => s.hidden = s.id !== onglet);
+  try { localStorage.setItem("onglet", onglet); } catch {}
+});
+try { document.querySelector(`#nav button[data-onglet="${localStorage.getItem("onglet")}"]`)?.click(); } catch {}
+
+async function etape(id, fn) {
+  try { await fn(); } catch (err) { $(id).innerHTML = `<p class="erreur">Lecture impossible : ${esc(err.message)}</p>`; }
+}
+
+(async () => {
+  let config = null;
+  await etape("reglages", async () => { config = (await lire("config.json", true)).court_terme; rendreReglages(config); });
+  await Promise.all([
+    etape("portefeuille", async () => rendrePortefeuille(await lire("agent/positions.json", true), config)),
+    etape("candidats", async () => rendreCandidats(await lire("agent/candidats-du-jour.json", true))),
+    etape("session", chargerSessions),
+    etape("notes", async () => {
+      const notes = await lire("agent/notes.md");
+      const vide = !notes || !notes.replace(/^#.*$/m, "").trim();
+      $("notes").innerHTML = `<p class="sous-titre">La mémoire de Claude d'une session à l'autre (200 lignes au plus).</p>
+        <div class="md">${vide ? `<p class="vide">Aucune note pour l'instant.</p>` : md(notes)}</div>`;
+    }),
+    etape("strategie", async () => { $("strategie").innerHTML = `<div class="md">${md(await lire("docs/strategie.md"))}</div>`; }),
+    etape("consigne", async () => {
+      $("consigne").innerHTML = `<p class="sous-titre">Ce que Claude reçoit au début de chaque session, suivi du contexte du jour
+        (candidats et portefeuille).</p><div class="md">${md(await lire("agent/consigne.md"))}</div>`;
+    }),
+  ]);
+  $("maj").textContent = `mis à jour à ${new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
+})();
+</script>
+</body>
+</html>
