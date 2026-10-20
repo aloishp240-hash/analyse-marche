@@ -1,0 +1,60 @@
+# Agent court terme : suivi du portefeuille fictif toutes les 5 min, puis session Claude après la clôture.
+name: court-terme
+
+on:
+  schedule:
+    # Toutes les 5 min en semaine, 13h-22h55 UTC : couvre la séance US et l'après-clôture, heure d'été comme d'hiver.
+    # Les scripts vérifient eux-mêmes l'heure de New York et sortent aussitôt hors horaire.
+    - cron: "*/5 13-22 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Test : messages, candidats et consigne affichés dans le journal, sans Claude ni Telegram"
+        type: boolean
+        default: true
+
+concurrency:
+  group: court-terme
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: pip install -r requirements.txt
+      # Caches du jour (historiques, résultats, fondamentaux), conservés d'un lancement à l'autre
+      - uses: actions/cache@v4
+        with:
+          path: donnees
+          key: court-terme-${{ github.run_id }}
+          restore-keys: court-terme-
+      - run: npm install -g @anthropic-ai/claude-code@2.1.296
+      - if: ${{ !inputs.test }}
+        run: python positions.py && python agent.py
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+      - if: ${{ inputs.test }}
+        run: python positions.py --dry-run && python agent.py --force --dry-run
+      # L'état du portefeuille, les notes et les sessions vivent dans agent/ : on les enregistre dans le dépôt.
+      - if: ${{ !inputs.test }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add agent
+          git diff --cached --quiet || {
+            git commit -m "Agent court terme : mise à jour $(date -u +%F)"
+            git pull --rebase && git push
+          }

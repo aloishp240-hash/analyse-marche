@@ -20,3 +20,24 @@ Le Mac doit être allumé et éveillé entre 15h30 et 22h30 (heure de Paris) pou
 
 Le workflow `.github/workflows/surveillance.yml` tourne toutes les 5 min en semaine sur GitHub. Il envoie le calendrier des résultats et le bilan de clôture, et prend le relais des alertes de séance si le Mac ne s'est pas manifesté depuis 15 min. Le Mac signale sa présence via `gh variable set MAC_VU`.
 Configuration : `GITHUB_DEPOT=compte/depot` dans `.env`, secrets `TELEGRAM_TOKEN` et `TELEGRAM_CHAT_ID` dans le dépôt. Sans `GITHUB_DEPOT`, le Mac fait tout seul. GitHub suspend les tâches planifiées après 60 jours sans commit.
+
+## Agent court terme (portefeuille fictif)
+
+Signaux d'entrée, d'objectif et de stop sur un portefeuille **fictif** de 3 000 €, validés par une session Claude (abonnement, sans API payante). Aucun ordre réel n'est passé.
+
+- `positions.py` : simule les exécutions des ordres et positions fictifs toutes les 5 min, envoie les entrées et sorties sur Telegram, et le bilan du vendredi après 16h15 New York.
+- `agent.py` : après 16h45 New York, repère les candidats de la stratégie (`court_terme/`), puis lance `claude -p` avec la consigne `agent/consigne.md` et le skill `.claude/skills/analyse-court-terme`. Claude n'a accès qu'aux scripts de `outils/` (actualités, engouement ApeWisdom, Reddit, notes, signal, info), à `fiche.py` et à la recherche web. Deux échecs dans la journée : pas de signal ce jour-là, et un message Telegram le dit.
+- `backtest.py` : rejoue la stratégie sans Claude sur l'historique (`.venv/bin/python backtest.py`).
+
+L'état vit dans `agent/` (`positions.json`, `notes.md`, `sessions/AAAA-MM-JJ.md`) et le workflow `.github/workflows/court-terme.yml` le commite sur `main` : faire `git pull` avant de travailler sur le Mac.
+
+Configuration : secrets `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`), `TELEGRAM_TOKEN` et `TELEGRAM_CHAT_ID`. Pour Reddit (facultatif), créer une application de type « script » sur reddit.com/prefs/apps, puis :
+
+    gh secret set REDDIT_CLIENT_ID
+    gh secret set REDDIT_CLIENT_SECRET
+
+Commandes utiles :
+
+    .venv/bin/python positions.py --dry-run          # messages sans envoi ni sauvegarde
+    .venv/bin/python agent.py --force --dry-run      # candidats et consigne, sans appeler Claude
+    gh workflow run court-terme.yml                  # même test sur GitHub
