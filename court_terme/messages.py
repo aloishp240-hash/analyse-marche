@@ -48,5 +48,6 @@ def message_evenement(evt):
         "stop": f"🔴 STOP — {t} vendue à {prix}{resultat}",
         "objectif": f"🎯 OBJECTIF — {t} vendue à {prix}{resultat}",
         "temps": f"⏱️ STOP TEMPOREL — {t} vendue à {prix} (15e séance){resultat}",
+        "decision": f"✋ VENTE PAR CLAUDE — {t} vendue à {prix} à l'ouverture{resultat}",
         "stop_remonte": f"🛡️ STOP REMONTÉ — {t} : stop au prix d'entrée {prix}",
     }[evt["type"]]

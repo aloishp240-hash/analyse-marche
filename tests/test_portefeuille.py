@@ -44,6 +44,8 @@ def test_refus():
     engage = {**etat, "positions": [{**autre, "quantite": 290, "entree": 10}]}             # 2 900 € engagés
     assert verifier_ajout(engage, "AAA", "Logiciels", 2, 99.5, 1.0, p)
     assert verifier_ajout(etat, "AAA", "Logiciels", 6, 99.5, 1.0, p) is None
+    vendue = {**etat, "positions": [{**autre, "quantite": 290, "entree": 10, "sortie_demandee": "2026-10-20"}]}
+    assert verifier_ajout(vendue, "AAA", "Logiciels", 2, 99.5, 1.0, p) is None           # capital libéré
 
 
 def test_ajouter_ordre():

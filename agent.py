@@ -31,7 +31,7 @@ SESSIONS = AGENT / "sessions"
 HEURE_AGENT = time(16, 45)
 TENTATIVES_MAX = 2
 DUREE_MAX_S = 1200
-OUTILS = ["candidats", "actualites", "engouement", "reddit", "polymarket", "notes", "signal", "info"]
+OUTILS = ["candidats", "actualites", "engouement", "reddit", "polymarket", "notes", "signal", "fermer", "info"]
 # Outils accessibles sans autorisation en mode -p : retirés pour qu'un contenu web malveillant ne lise ni .git/config
 # (jeton GitHub) ni aucun fichier, et ne modifie pas le dépôt.
 INTERDITS = ["Read", "Glob", "Grep", "Edit", "Write", "NotebookEdit", "Task"]
@@ -115,10 +115,13 @@ def resume_portefeuille(etat):
     lignes = [f"Capital réalisé : {capital_courant(etat):.2f} € (départ {etat['capital_initial']} €)"]
     for o in etat["ordres"]:
         lignes.append(f"- Ordre {titre(o)} : entrée {o['entree']:.2f} $, stop {o['stop']:.2f} $, "
-                      f"objectif {o['objectif']:.2f} $, signal du {o['date_signal']}")
+                      f"objectif {o['objectif']:.2f} $, signal du {o['date_signal']}\n"
+                      f"  Thèse d'achat : {o.get('justification', '(inconnue)')}")
     for p in etat["positions"]:
+        vente = f", vente déjà décidée le {p['sortie_demandee']}" if p.get("sortie_demandee") else ""
         lignes.append(f"- Position {titre(p)} : achetée {p['prix_entree']:.2f} $ le {p['date_entree']}, "
-                      f"stop {p['stop']:.2f} $, objectif {p['objectif']:.2f} $, séance {p['seances']}")
+                      f"stop {p['stop']:.2f} $, objectif {p['objectif']:.2f} $, séance {p['seances']}{vente}\n"
+                      f"  Thèse d'achat : {p.get('justification', '(inconnue)')}")
     if not etat["ordres"] and not etat["positions"]:
         lignes.append("Aucun ordre ni position en cours.")
     return "\n".join(lignes)

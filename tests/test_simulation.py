@@ -137,3 +137,12 @@ def test_stop_remonte_seulement_en_fin_de_seance():
     assert e["positions"][0]["stop"] == 96.5
     evts = avancer(e, {"AAA": [barre(1, 101, 102.6, 99, 102)]}, 1.0, p)
     assert [v["type"] for v in evts] == ["stop_remonte"] and e["positions"][0]["stop"] == 99.5
+
+
+def test_vente_decidee_a_l_ouverture_suivante():
+    pos = {**position(), "sortie_demandee": (J0 + timedelta(days=1)).isoformat()}
+    e = etat(positions=[pos])
+    assert avancer(e, {"AAA": [barre(1, 100, 101, 99, 100.5)]}, 1.0, p) == []   # séance de la décision
+    evts = avancer(e, {"AAA": [barre(1, 100, 101, 99, 100.5), barre(2, 101, 102, 100, 101.5)]}, 1.0, p)
+    assert [(v["type"], v["prix"]) for v in evts] == [("decision", 101)]
+    assert e["positions"] == [] and e["fermees"][0]["motif"] == "decision"

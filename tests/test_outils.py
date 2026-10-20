@@ -4,7 +4,7 @@ from datetime import date
 import pytest
 
 from court_terme import attente
-from outils import engouement, info, notes, polymarket
+from outils import engouement, fermer, info, notes, polymarket
 from outils import signal as outil_signal
 
 JOUR = date(2026, 10, 20)
@@ -21,12 +21,13 @@ def agent(tmp_path, monkeypatch):
     envois = []
     candidats, etat = tmp_path / "candidats-du-jour.json", tmp_path / "positions.json"
     candidats.write_text(json.dumps({"jour": JOUR.isoformat(), "candidats": [candidat("AAA")]}))
-    for module in (outil_signal, info):
+    for module in (outil_signal, info, fermer):
         monkeypatch.setattr(module, "ETAT", etat)
         monkeypatch.setattr(module, "EN_ATTENTE", tmp_path / "en-attente.json")
     monkeypatch.setattr(outil_signal, "CANDIDATS", candidats)
     monkeypatch.setattr(outil_signal, "taux_eurusd", lambda: 1.0)
     monkeypatch.setattr(outil_signal, "aujourd_hui", lambda: JOUR)
+    monkeypatch.setattr(fermer, "aujourd_hui", lambda: JOUR)
     return etat, envois
 
 
@@ -141,3 +142,38 @@ def test_polymarket_filtre_et_trie(monkeypatch, capsys):
     assert "Petit pari" not in sortie and "Clos" not in sortie
     assert "Pas de changement : 86 % (+7 pts sur 7 j)" in sortie and "Hausse de 25 pb : 14 %\n" in sortie
     assert sortie.index("Pas de changement") < sortie.index("Hausse")
+
+
+def test_fermer_annule_un_ordre(agent, capsys):
+    etat, envois = agent
+    ecrire_etat(etat, ["AAA", "BBB"])
+    fermer.main(["AAA", "Enquête annoncée."])
+    assert "annulé" in capsys.readouterr().out and not envois
+    attendu = en_attente(etat)
+    assert [o["ticker"] for o in attendu["etat"]["ordres"]] == ["BBB"]
+    assert attendu["messages"][0].startswith("❎ ORDRE ANNULÉ — AAA") and "Enquête annoncée." in attendu["messages"][0]
+
+
+def test_fermer_vend_une_position_puis_libere_la_place(agent, capsys):
+    etat, envois = agent
+    ecrire_etat(etat, ["B1", "B2", "B3", "B4", "B5"])
+    donnees = json.loads(etat.read_text())
+    donnees["positions"] = [{**donnees["ordres"].pop(), "prix_entree": 99.5, "date_entree": "2026-10-19"}]
+    etat.write_text(json.dumps(donnees))
+    outil_signal.main(["AAA", "Meilleur dossier."])
+    assert "refusé" in capsys.readouterr().out                                       # 5 titres suivis
+    fermer.main(["B5", "Thèse cassée."])
+    assert "vente de B5 enregistrée" in capsys.readouterr().out
+    position = en_attente(etat)["etat"]["positions"][0]
+    assert position["sortie_demandee"] == JOUR.isoformat() and position["justification_sortie"] == "Thèse cassée."
+    fermer.main(["B5", "Encore."])
+    assert "déjà demandée" in capsys.readouterr().out
+    outil_signal.main(["AAA", "Meilleur dossier."])
+    assert "signal enregistré" in capsys.readouterr().out
+
+
+def test_fermer_refuse_ticker_non_suivi(agent, capsys):
+    etat, envois = agent
+    ecrire_etat(etat, ["AAA"])
+    fermer.main(["ZZZ", "raison"])
+    assert "refusé" in capsys.readouterr().out and en_attente(etat)["messages"] == []

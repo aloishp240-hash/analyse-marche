@@ -36,23 +36,23 @@ def quantite(entree, stop, capital_eur, taux_eurusd, p):
     return max(0, round(math.floor(brute * echelle + 1e-9) / echelle, p["decimales_quantite"]))
 
 
-def _engage_eur(etat, taux_eurusd):
-    return sum(e["quantite"] * e.get("prix_entree", e["entree"])
-               for e in etat["ordres"] + etat["positions"]) / taux_eurusd
+def _engage_eur(suivis, taux_eurusd):
+    return sum(e["quantite"] * e.get("prix_entree", e["entree"]) for e in suivis) / taux_eurusd
 
 
 def verifier_ajout(etat, ticker, industrie, quantite, entree, taux_eurusd, p):
     """Motif de refus, ou None si l'ordre peut être ajouté."""
-    suivis = etat["ordres"] + etat["positions"]
     if quantite <= 0:
         return "quantité nulle pour le plafond par position"
-    if any(e["ticker"] == ticker for e in suivis):
+    if any(e["ticker"] == ticker for e in etat["ordres"] + etat["positions"]):
         return f"{ticker} déjà en ordre ou en position"
+    # Une position dont Claude a décidé la vente libère sa place et son capital : elle part à l'ouverture
+    suivis = etat["ordres"] + [e for e in etat["positions"] if not e.get("sortie_demandee")]
     if len(suivis) >= p["positions_max"]:
         return f"déjà {p['positions_max']} ordres ou positions"
     if industrie is not None and sum(e.get("industrie") == industrie for e in suivis) >= p["par_industrie_max"]:
         return f"déjà {p['par_industrie_max']} titres dans l'industrie {industrie}"
-    if _engage_eur(etat, taux_eurusd) + quantite * entree / taux_eurusd > capital_courant(etat):
+    if _engage_eur(suivis, taux_eurusd) + quantite * entree / taux_eurusd > capital_courant(etat):
         return "montant engagé supérieur au capital"
     return None
 

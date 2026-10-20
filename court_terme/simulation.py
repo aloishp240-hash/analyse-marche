@@ -35,6 +35,9 @@ def _sortie(pos, b):
 
 
 def _traiter_position(etat, pos, b, taux_eurusd, p):
+    if pos.get("sortie_demandee") and b["jour"].isoformat() > pos["sortie_demandee"]:
+        # Vente décidée par Claude après la clôture : exécutée à l'ouverture de la séance suivante
+        return [_fermer(etat, pos, b["jour"], b["ouverture"], "decision", taux_eurusd)], True
     sortie = _sortie(pos, b)
     if sortie:
         return [_fermer(etat, pos, b["jour"], sortie[1], sortie[0], taux_eurusd)], True
