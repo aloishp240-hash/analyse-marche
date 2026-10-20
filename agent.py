@@ -16,9 +16,9 @@ from datetime import datetime, time
 from pathlib import Path
 
 from commun import INDICE, NY, charger_config, charger_tickers, envoyer_telegram, fondamentaux, \
-    historique_journalier, prochains_resultats
+    historique_journalier, nom_societe, prochains_resultats
 from court_terme import attente
-from court_terme.messages import LIBELLES
+from court_terme.messages import LIBELLES, titre
 from court_terme.portefeuille import capital_courant, charger, sauver
 from court_terme.strategie import reperer
 
@@ -114,10 +114,10 @@ def lancer_session(consigne, jour):
 def resume_portefeuille(etat):
     lignes = [f"Capital réalisé : {capital_courant(etat):.2f} € (départ {etat['capital_initial']} €)"]
     for o in etat["ordres"]:
-        lignes.append(f"- Ordre {o['ticker']} : entrée {o['entree']:.2f} $, stop {o['stop']:.2f} $, "
+        lignes.append(f"- Ordre {titre(o)} : entrée {o['entree']:.2f} $, stop {o['stop']:.2f} $, "
                       f"objectif {o['objectif']:.2f} $, signal du {o['date_signal']}")
     for p in etat["positions"]:
-        lignes.append(f"- Position {p['ticker']} : achetée {p['prix_entree']:.2f} $ le {p['date_entree']}, "
+        lignes.append(f"- Position {titre(p)} : achetée {p['prix_entree']:.2f} $ le {p['date_entree']}, "
                       f"stop {p['stop']:.2f} $, objectif {p['objectif']:.2f} $, séance {p['seances']}")
     if not etat["ordres"] and not etat["positions"]:
         lignes.append("Aucun ordre ni position en cours.")
@@ -146,6 +146,7 @@ def main():
     infos = fondamentaux([c["ticker"] for c in candidats], cache=False) if candidats else {}
     for c in candidats:
         c["industrie"] = (infos.get(c["ticker"]) or {}).get("industry")
+        c["nom"] = nom_societe(infos.get(c["ticker"]), c["ticker"])
     contenu = json.dumps({"jour": jour.isoformat(), "candidats": candidats}, indent=2, ensure_ascii=False)
 
     if args.dry_run:
@@ -160,7 +161,7 @@ def main():
             envoyer(f"🤖 AGENT COURT TERME — {texte}")
         return
 
-    liste = ", ".join(f"{c['ticker']} ({LIBELLES.get(c['configuration'])})" for c in candidats) or "aucun"
+    liste = ", ".join(f"{titre(c)}, {LIBELLES.get(c['configuration'])}" for c in candidats) or "aucun"
     consigne = (f"{CONSIGNE.read_text().strip()}\n\n## Contexte\nDate : {jour.isoformat()}\n"
                 f"Candidats du jour : {liste}\n\nPortefeuille fictif :\n{resume_portefeuille(etat)}\n")
     if args.dry_run:

@@ -8,7 +8,7 @@ la repasser ne rejoue rien.
 
 
 def _evenement(type_, element, jour, prix, **autres):
-    return {"type": type_, "ticker": element["ticker"], "jour": jour.isoformat(), "prix": prix, **autres}
+    return {"type": type_, "ticker": element["ticker"], "nom": element.get("nom"), "jour": jour.isoformat(), "prix": prix, **autres}
 
 
 def _fermer(etat, pos, jour, prix, motif, taux_eurusd):

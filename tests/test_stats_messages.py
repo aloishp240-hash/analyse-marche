@@ -44,3 +44,19 @@ def test_message_evenement():
         texte = message_evenement({"type": type_, "ticker": "AAA", "jour": "2026-10-20", "prix": 99.5,
                                    "resultat_eur": -18.0})
         assert "AAA" in texte and "99.50" in texte
+
+
+def test_message_signal_nom_et_rubriques():
+    ordre = {"ticker": "SPCX", "nom": "SpaceX", "configuration": "B", "entree": 99.5, "stop": 96.5,
+             "objectif": 105.5, "quantite": 6,
+             "justification": "Technique : cassure nette. Actualités : contrat signé. Contexte : secteur porteur. "
+                              "Risque : lancement raté."}
+    texte = message_signal(ordre, 1.0)
+    assert "SpaceX (SPCX)" in texte
+    assert "\n• Technique : cassure nette.\n• Actualités : contrat signé." in texte
+    assert "\n• Risque : lancement raté." in texte
+
+
+def test_titre_sans_nom():
+    assert message_evenement({"type": "entree", "ticker": "AAA", "prix": 10.0}).endswith("AAA achetée à 10.00 $")
+    assert "SpaceX (SPCX)" in message_evenement({"type": "entree", "ticker": "SPCX", "nom": "SpaceX", "prix": 10.0})

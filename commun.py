@@ -1,6 +1,7 @@
 """Fonctions partagées : configuration, tickers, données de marché, indicateurs, Telegram."""
 import json
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from io import StringIO
@@ -125,7 +126,7 @@ def prochains_resultats(tickers, cache=True):
 
 
 CHAMPS_FONDAMENTAUX = [
-    "sector", "industry", "marketCap", "trailingPE", "forwardPE", "priceToSalesTrailing12Months",
+    "shortName", "longName", "sector", "industry", "marketCap", "trailingPE", "forwardPE", "priceToSalesTrailing12Months",
     "totalDebt", "totalCash", "ebitda", "debtToEquity", "revenueGrowth", "earningsGrowth", "profitMargins",
     "freeCashflow", "recommendationKey", "recommendationMean", "targetMeanPrice", "numberOfAnalystOpinions",
 ]
@@ -138,6 +139,27 @@ def fondamentaux(tickers, cache=True):
         return {champ: infos.get(champ) for champ in CHAMPS_FONDAMENTAUX}
 
     return par_titre_quotidien("fondamentaux", tickers, cache, un_ticker)
+
+
+SUFFIXES_SOCIETE = re.compile(
+    r"[\s,]+(Inc|Incorporated|Corp|Corporation|Co|Company|Ltd|Limited|plc|PLC|N\.?V|S\.?A|AG|SE|Holdings?|Group)\.?$")
+
+
+# Noms usuels quand celui de Yahoo n'est pas celui qu'on emploie
+NOMS_USUELS = {"SPCX": "SpaceX", "GOOG": "Google", "GOOGL": "Google", "META": "Meta"}
+
+
+def nom_societe(infos, ticker):
+    """Nom usuel de la société (« NVIDIA » plutôt que « NVIDIA Corporation »), le ticker à défaut."""
+    if ticker in NOMS_USUELS:
+        return NOMS_USUELS[ticker]
+    nom = (infos or {}).get("shortName") or (infos or {}).get("longName")
+    if not nom:
+        return ticker
+    nom = nom.split(" - ")[0].strip()  # « ASML Holding N.V. - New York Re… »
+    while (court := SUFFIXES_SOCIETE.sub("", nom)) != nom and court:
+        nom = court
+    return nom.rstrip(" ,") or ticker
 
 
 def rsi(clotures, periode=14):

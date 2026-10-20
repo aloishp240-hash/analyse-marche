@@ -64,8 +64,21 @@ Mémoire d'une session à l'autre (200 lignes au plus). Lis-les au début de la 
 fin : candidats rejetés et pourquoi, titres à surveiller, leçon tirée d'une position fermée.
 
 ### Signal — `python outils/signal.py TICKER "justification"`
-Valide un candidat : le code calcule l'ordre fictif et le met en attente avec ta justification (2 à 3 phrases, en
-français). Il n'est enregistré et envoyé sur Telegram qu'à la fin de la session, si elle se termine normalement. Affiche « signal enregistré » ou « refusé : motif » (plafonds atteints, ticker hors candidats). Un refus
+Valide un candidat : le code calcule l'ordre fictif et le met en attente avec ta justification, envoyée telle
+quelle sur Telegram sous « Pourquoi Claude achète ». Elle doit expliquer ta décision à quelqu'un qui n'a pas suivi la
+session, en français, avec ces quatre rubriques dans cet ordre (chacune 1 à 2 phrases, avec des faits précis) :
+
+- `Technique :` la configuration et ce qui la rend propre (RSI, force relative contre QQQ, distance au stop) ;
+- `Actualités :` ce que tu as lu et pourquoi ce n'est pas un couteau qui tombe (ou le catalyseur d'une cassure) ;
+- `Contexte :` secteur, résultats à venir, engouement, Polymarket — ce que tu as vérifié en plus ;
+- `Risque :` ce qui invaliderait le trade.
+
+Exemple : `python outils/signal.py NVDA "Technique : repli de 6 % vers la moyenne 50 jours, RSI 41, force relative
++12 pts contre QQQ. Actualités : baisse liée à des prises de bénéfices sur le secteur, aucune nouvelle négative sur
+NVIDIA. Contexte : résultats dans 5 semaines, engouement stable sur Reddit. Risque : une nouvelle restriction
+d'exportation vers la Chine."`
+
+Nomme la société par son nom (« SpaceX », pas « SPCX ») dans la justification. Il n'est enregistré et envoyé sur Telegram qu'à la fin de la session, si elle se termine normalement. Affiche « signal enregistré » ou « refusé : motif » (plafonds atteints, ticker hors candidats). Un refus
 est définitif pour la session : ne réessaie pas.
 
 ### Information — `python outils/info.py TICKER "texte"`
@@ -76,7 +89,7 @@ sans toucher au portefeuille. Les liens sont retirés et le texte limité à 400
 
 Termine ta réponse par une ligne de verdict par candidat :
 
-- `TICKER : ✅ validé — ` puis 2 à 3 phrases ;
-- `TICKER : ❌ rejeté — ` puis 2 à 3 phrases.
+- `Société (TICKER) : ✅ validé — ` puis la même justification en quatre rubriques que pour `signal.py` ;
+- `Société (TICKER) : ❌ rejeté — ` puis 2 à 3 phrases sur la raison précise du rejet.
 
 Puis mets les notes à jour avec `notes.py ajouter`.

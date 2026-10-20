@@ -15,6 +15,7 @@ if __name__ == "__main__":  # la racine du dépôt remplace outils/, où signal.
 
 from commun import charger_config
 from court_terme import attente
+from court_terme.messages import titre
 from court_terme.portefeuille import charger
 
 AGENT = Path(__file__).resolve().parents[1] / "agent"
@@ -35,10 +36,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     ticker = args.ticker.upper()
     etat = attente.lire(EN_ATTENTE)["etat"] or charger(ETAT, charger_config()["court_terme"])
-    if ticker not in {e["ticker"] for e in etat["ordres"] + etat["positions"]}:
+    suivi = next((e for e in etat["ordres"] + etat["positions"] if e["ticker"] == ticker), None)
+    if suivi is None:
         print(f"refusé : {ticker} n'est ni en ordre ni en position")
         return 0
-    attente.ajouter(EN_ATTENTE, f"ℹ️ {ticker} — {nettoyer(args.texte)}")
+    attente.ajouter(EN_ATTENTE, f"ℹ️ {titre(suivi)} — {nettoyer(args.texte)}")
     print("information enregistrée (envoyée sur Telegram à la fin de la session)")
     return 0
 
