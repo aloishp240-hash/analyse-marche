@@ -31,6 +31,7 @@ SESSIONS = AGENT / "sessions"
 HEURE_AGENT = time(16, 45)
 TENTATIVES_MAX = 2
 DUREE_MAX_S = 1200
+EXTRAIT_MAX = 1500  # caractères gardés de chaque réponse d'outil dans le journal
 OUTILS = ["candidats", "actualites", "engouement", "reddit", "polymarket", "notes", "signal", "fermer", "info"]
 # Outils accessibles sans autorisation en mode -p : retirés pour qu'un contenu web malveillant ne lise ni .git/config
 # (jeton GitHub) ni aucun fichier, et ne modifie pas le dépôt.
@@ -42,9 +43,92 @@ def doit_lancer(maintenant, derniere_seance, session_existe):
 
 
 def commande_claude(consigne):
-    return ["claude", "-p", consigne, "--model", "sonnet", "--max-turns", "30", "--allowedTools",
-            *[f"Bash(python outils/{outil}.py:*)" for outil in OUTILS], "Bash(python fiche.py:*)",
-            "WebSearch", "WebFetch", "Skill", "--disallowedTools", *INTERDITS]
+    # stream-json : chaque appel d'outil et sa réponse arrivent sur stdout, ce qui permet d'écrire le journal
+    return ["claude", "-p", consigne, "--model", "sonnet", "--max-turns", "30", "--output-format", "stream-json",
+            "--verbose", "--allowedTools", *[f"Bash(python outils/{outil}.py:*)" for outil in OUTILS],
+            "Bash(python fiche.py:*)", "WebSearch", "WebFetch", "Skill", "--disallowedTools", *INTERDITS]
+
+
+def _texte_resultat(contenu):
+    if isinstance(contenu, list):
+        return "\n".join(b.get("text", "") for b in contenu if isinstance(b, dict))
+    return str(contenu or "")
+
+
+def _decrire_appel(nom, entree):
+    if nom == "Bash":
+        return f"Commande : `{entree.get('command', '')}`"
+    if nom == "WebSearch":
+        return f"Recherche web : « {entree.get('query', '')} »"
+    if nom == "WebFetch":
+        return f"Page lue : {entree.get('url', '')}\n\nQuestion posée : {entree.get('prompt', '')}"
+    if nom == "Skill":
+        return f"Skill chargé : {entree.get('skill', '')}"
+    return f"{nom} : `{json.dumps(entree, ensure_ascii=False)}`"
+
+
+def lire_flux(sortie):
+    """Sépare la sortie stream-json de claude en (réponse finale, étapes du journal).
+
+    Chaque étape est un texte de Claude ou un appel d'outil avec un extrait de sa réponse. Une sortie qui n'est pas
+    du stream-json est rendue telle quelle comme réponse finale.
+    """
+    final, etapes, appels, bilan = None, [], {}, None
+    for ligne in sortie.splitlines():
+        try:
+            evt = json.loads(ligne)
+        except ValueError:
+            continue
+        if not isinstance(evt, dict):
+            continue
+        if evt.get("type") == "result":
+            final = evt.get("result")
+            bilan = f"{evt.get('num_turns', '?')} tours, {round(evt.get('duration_ms', 0) / 1000)} s"
+            continue
+        if evt.get("type") not in ("assistant", "user"):
+            continue
+        for bloc in (evt.get("message") or {}).get("content") or []:
+            if not isinstance(bloc, dict):
+                continue
+            if bloc.get("type") == "text" and evt["type"] == "assistant" and bloc.get("text", "").strip():
+                etapes.append({"texte": bloc["text"].strip()})
+            elif bloc.get("type") == "tool_use" and bloc.get("name") != "ToolSearch":
+                etape = {"appel": _decrire_appel(bloc.get("name"), bloc.get("input") or {})}
+                appels[bloc.get("id")] = etape
+                etapes.append(etape)
+            elif bloc.get("type") == "tool_result" and bloc.get("tool_use_id") in appels:
+                etape = appels[bloc["tool_use_id"]]
+                etape["reponse"] = _texte_resultat(bloc.get("content")).strip()
+                etape["erreur"] = bool(bloc.get("is_error"))
+    return (sortie if final is None else final), etapes, bilan
+
+
+def ecrire_journal(jour, etapes, bilan, reussie):
+    """Journal lisible de la session : ce que Claude a cherché, lu et lancé, avec un extrait de chaque réponse."""
+    lignes = [f"# Journal de la session du {jour.isoformat()}", ""]
+    if not reussie:
+        lignes += ["⚠️ Session échouée : rien n'a été appliqué ni envoyé.", ""]
+    if bilan:
+        lignes += [f"Durée : {bilan}.", ""]
+    numero = 0
+    for etape in etapes:
+        if "texte" in etape:
+            lignes += ["> 💬 " + etape["texte"].replace("\n", "\n> "), ""]
+            continue
+        numero += 1
+        lignes += [f"## {numero}. {etape['appel']}", ""]
+        reponse = etape.get("reponse")
+        if reponse is None:
+            lignes += ["_(pas de réponse)_", ""]
+            continue
+        if len(reponse) > EXTRAIT_MAX:
+            reponse = reponse[:EXTRAIT_MAX] + " […]"
+        titre_reponse = "Erreur" if etape.get("erreur") else "Réponse"
+        lignes += [f"{titre_reponse} :", "", "```", reponse.replace("```", "'''"), "```", ""]
+    if not etapes:
+        lignes += ["Aucun outil appelé.", ""]
+    SESSIONS.mkdir(parents=True, exist_ok=True)
+    (SESSIONS / f"{jour.isoformat()}-journal.md").write_text("\n".join(lignes))
 
 
 def environnement_claude():
@@ -89,17 +173,23 @@ def lancer_session(consigne, jour):
     """Session Claude ; ses signaux ne sont appliqués que si elle réussit.
 
     En cas d'échec, rien n'est envoyé : nouvelle tentative au passage suivant, puis abandon pour la journée.
+    Le journal des outils appelés est écrit dans les deux cas.
     """
     EN_ATTENTE.unlink(missing_ok=True)
     try:
         resultat = subprocess.run(commande_claude(consigne), timeout=DUREE_MAX_S, capture_output=True, text=True,
                                   env=environnement_claude())
-        code, erreur = resultat.returncode, resultat.stderr
+        code, sortie, erreur = resultat.returncode, resultat.stdout, resultat.stderr
     except (subprocess.TimeoutExpired, OSError) as exception:
+        sortie = getattr(exception, "stdout", None) or ""
+        if isinstance(sortie, bytes):
+            sortie = sortie.decode(errors="replace")
         code, erreur = None, str(exception)
+    final, etapes, bilan = lire_flux(sortie)
+    ecrire_journal(jour, etapes, bilan, code == 0)
     if code == 0:
         appliquer_attente()
-        ecrire_session(jour, resultat.stdout)
+        ecrire_session(jour, final)
         return
     EN_ATTENTE.unlink(missing_ok=True)
     print(f"Session Claude échouée (code {code}) :\n{erreur[-2000:]}", file=sys.stderr)

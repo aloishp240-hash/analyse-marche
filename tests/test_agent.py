@@ -92,3 +92,52 @@ def test_claude_sans_lecture_de_fichiers_ni_secrets(tmp_path, monkeypatch):
                         lambda *a, **k: appels.append(k) or subprocess.CompletedProcess(a, 0, stdout="", stderr=""))
     agent.lancer_session("consigne", MARDI)
     assert "TELEGRAM_TOKEN" not in appels[0]["env"] and appels[0]["env"]["CLAUDE_CODE_OAUTH_TOKEN"] == "jeton"
+
+
+def flux(*evenements):
+    return "\n".join(json.dumps(e, ensure_ascii=False) for e in evenements)
+
+
+FLUX = flux(
+    {"type": "system", "subtype": "init"},
+    {"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": "t0", "name": "ToolSearch", "input": {"query": "select:WebSearch"}},
+        {"type": "text", "text": "Je regarde les actualités de AAA."},
+        {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "python outils/actualites.py AAA"}}]}},
+    {"type": "user", "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "t0", "content": [{"type": "tool_reference"}]},
+        {"type": "tool_result", "tool_use_id": "t1", "content": "Aucune mauvaise nouvelle. " * 100}]}},
+    {"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": "t2", "name": "WebSearch", "input": {"query": "AAA guidance"}}]}},
+    {"type": "user", "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "t2", "content": [{"type": "text", "text": "refusé"}], "is_error": True}]}},
+    {"type": "result", "result": "AAA : ✅ validé — ok", "num_turns": 4, "duration_ms": 61500})
+
+
+def test_lire_flux():
+    final, etapes, bilan = agent.lire_flux("bruit\n" + FLUX)
+    assert final == "AAA : ✅ validé — ok" and bilan == "4 tours, 62 s"
+    assert [e.get("appel") or e["texte"] for e in etapes] == [
+        "Je regarde les actualités de AAA.", "Commande : `python outils/actualites.py AAA`",
+        "Recherche web : « AAA guidance »"]                                      # ToolSearch ignoré
+    assert etapes[1]["reponse"].startswith("Aucune mauvaise nouvelle.") and etapes[2]["erreur"]
+    assert agent.lire_flux("texte brut")[0] == "texte brut"
+
+
+def test_session_reussie_ecrit_le_journal(tmp_path, monkeypatch):
+    fichiers(tmp_path, monkeypatch)
+    monkeypatch.setattr(agent.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=FLUX, stderr=""))
+    agent.lancer_session("consigne", MARDI)
+    assert (tmp_path / "2026-10-20.md").read_text() == "# Session du 2026-10-20\n\nAAA : ✅ validé — ok\n"
+    journal = (tmp_path / "2026-10-20-journal.md").read_text()
+    assert "## 1. Commande : `python outils/actualites.py AAA`" in journal and "## 2. Recherche web" in journal
+    assert "> 💬 Je regarde" in journal and "Erreur :" in journal and " […]" in journal
+    assert "échouée" not in journal
+
+
+def test_session_echouee_garde_le_journal(tmp_path, monkeypatch):
+    fichiers(tmp_path, monkeypatch)
+    monkeypatch.setattr(agent.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 1, stdout=FLUX, stderr=""))
+    agent.lancer_session("consigne", MARDI)
+    assert "Session échouée" in (tmp_path / "2026-10-20-journal.md").read_text()
+    assert not agent.session_faite(MARDI)

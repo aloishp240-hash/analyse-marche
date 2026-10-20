@@ -29,7 +29,7 @@ Signaux d'entrée, d'objectif et de stop sur un portefeuille **fictif** de 3 000
 - `agent.py` : après 16h45 New York, repère les candidats de la stratégie (`court_terme/`), puis lance `claude -p` avec la consigne `agent/consigne.md` et le skill `.claude/skills/analyse-court-terme`. Claude n'a accès qu'aux scripts de `outils/` (actualités, engouement ApeWisdom, Reddit, paris Polymarket, notes, signal, fermer, info), à `fiche.py` et à la recherche web. Deux échecs dans la journée : pas de signal ce jour-là, et un message Telegram le dit.
 - `backtest.py` : rejoue la stratégie sans Claude sur l'historique (`.venv/bin/python backtest.py`).
 
-L'état vit dans `agent/` (`positions.json`, `notes.md`, `sessions/AAAA-MM-JJ.md`) et le workflow `.github/workflows/court-terme.yml` le commite sur `main` : faire `git pull` avant de travailler sur le Mac.
+L'état vit dans `agent/` (`positions.json`, `notes.md`, `sessions/AAAA-MM-JJ.md` pour les verdicts, `sessions/AAAA-MM-JJ-journal.md` pour chaque recherche et outil appelé par Claude, avec un extrait de la réponse) et le workflow `.github/workflows/court-terme.yml` le commite sur `main` : faire `git pull` avant de travailler sur le Mac.
 
 Configuration : secrets `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`), `TELEGRAM_TOKEN` et `TELEGRAM_CHAT_ID`. Pour Reddit (facultatif), créer une application de type « script » sur reddit.com/prefs/apps, puis :
 

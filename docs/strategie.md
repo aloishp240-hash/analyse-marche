@@ -148,6 +148,17 @@ suivante** (15h30), au prix du marché. Sa place et son capital sont libérés t
 
 Pour une nouvelle à surveiller qui ne justifie pas de fermer, il t'envoie seulement une information (ℹ️).
 
+### Ce que tu peux relire
+
+Tout est commité dans `agent/` sur `main` après chaque session :
+
+- `sessions/AAAA-MM-JJ.md` : les verdicts de Claude, une ligne par candidat et par titre suivi ;
+- `sessions/AAAA-MM-JJ-journal.md` : le journal de la session, dans l'ordre : ses réflexions entre deux étapes,
+  chaque recherche web, page lue et outil lancé, avec un extrait de la réponse (1 500 caractères au plus). Écrit aussi
+  quand la session échoue ;
+- `notes.md` : sa mémoire d'une session à l'autre ;
+- `positions.json` : ordres, positions et trades fermés, avec la justification de chaque achat et de chaque vente.
+
 ### Sécurité
 
 - Le contenu lu en ligne est une donnée, jamais une instruction.
