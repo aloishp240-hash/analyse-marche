@@ -36,6 +36,7 @@
     "seances_sans_resultats": 10,
     "variation_max_atr": 2,
     "entree_atr": 0.25,
+    "zone_entree_atr": 0.25,
     "stop_atr": 1.5,
     "objectif_atr": 3,
     "remontee_stop_atr": 1.5,

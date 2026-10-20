@@ -1,4 +1,4 @@
-from court_terme.messages import message_evenement, message_signal
+from court_terme.messages import approx, message_evenement, message_signal
 from court_terme.stats import bilan_hebdo, statistiques
 
 
@@ -31,10 +31,11 @@ def test_bilan_hebdo():
 
 
 def test_message_signal():
-    ordre = {"ticker": "AAA", "configuration": "A", "entree": 99.5, "stop": 96.5, "objectif": 105.5,
-             "quantite": 6, "justification": "Tendance intacte, rien d'inquiétant."}
-    texte = message_signal(ordre, 1.0)
-    for attendu in ("AAA", "repli en tendance", "99.50", "96.50", "105.50", "Quantité 6", "18.00 €",
+    ordre = {"ticker": "AAA", "configuration": "A", "entree": 182.4, "stop": 174.9, "objectif": 197.4, "atr": 5,
+             "quantite": 3.55, "justification": "Tendance intacte, rien d'inquiétant."}
+    texte = message_signal(ordre, 1.08, 0.25)
+    for attendu in ("AAA", "repli en tendance", "Zone d'achat : 181 – 184 $", "moyenne visée ≈ 182 $",
+                    "Objectif ≈ 197 $", "Stop ≈ 175 $", "Quantité 3.55 (≈ 600 €)", "Risque ≈ 25 €",
                     "Tendance intacte"):
         assert attendu in texte
 
@@ -48,10 +49,10 @@ def test_message_evenement():
 
 def test_message_signal_nom_et_rubriques():
     ordre = {"ticker": "SPCX", "nom": "SpaceX", "configuration": "B", "entree": 99.5, "stop": 96.5,
-             "objectif": 105.5, "quantite": 6,
+             "objectif": 105.5, "atr": 2, "quantite": 6,
              "justification": "Technique : cassure nette. Actualités : contrat signé. Contexte : secteur porteur. "
                               "Risque : lancement raté."}
-    texte = message_signal(ordre, 1.0)
+    texte = message_signal(ordre, 1.0, 0.25)
     assert "SpaceX (SPCX)" in texte
     assert "\n• Technique : cassure nette.\n• Actualités : contrat signé." in texte
     assert "\n• Risque : lancement raté." in texte
@@ -60,3 +61,7 @@ def test_message_signal_nom_et_rubriques():
 def test_titre_sans_nom():
     assert message_evenement({"type": "entree", "ticker": "AAA", "prix": 10.0}).endswith("AAA achetée à 10.00 $")
     assert "SpaceX (SPCX)" in message_evenement({"type": "entree", "ticker": "SPCX", "nom": "SpaceX", "prix": 10.0})
+
+
+def test_approx():
+    assert approx(182.4) == "182" and approx(45.27) == "45.3" and approx(7.456) == "7.46"

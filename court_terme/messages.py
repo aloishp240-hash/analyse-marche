@@ -16,12 +16,23 @@ def detailler(justification):
     return RUBRIQUES.sub(lambda m: f"\n• {m.group(1)} : ", justification).strip()
 
 
-def message_signal(ordre, taux_eurusd):
+def approx(prix):
+    """Prix arrondi à une précision lisible : au dollar au-dessus de 100 $, au dixième au-dessus de 10 $."""
+    return f"{prix:.0f}" if prix >= 100 else f"{prix:.1f}" if prix >= 10 else f"{prix:.2f}"
+
+
+def message_signal(ordre, taux_eurusd, zone_entree_atr):
+    """Signal avec une zone d'achat autour de l'entrée, que la simulation exécute au prix d'entrée exact."""
     risque = (ordre["entree"] - ordre["stop"]) * ordre["quantite"] / taux_eurusd
+    montant = ordre["entree"] * ordre["quantite"] / taux_eurusd
+    demi_zone = zone_entree_atr * ordre["atr"]
     return "\n".join([
         f"🟢 SIGNAL BUY — {titre(ordre)} ({LIBELLES.get(ordre['configuration'], ordre['configuration'])})",
-        f"Entrée {ordre['entree']:.2f} $ · Objectif {ordre['objectif']:.2f} $ · Stop {ordre['stop']:.2f} $",
-        f"Quantité {ordre['quantite']:g} · Risque {risque:.2f} € · Valable 3 séances",
+        f"Zone d'achat : {approx(ordre['entree'] - demi_zone)} – {approx(ordre['entree'] + demi_zone)} $ "
+        f"(moyenne visée ≈ {approx(ordre['entree'])} $)",
+        f"Objectif ≈ {approx(ordre['objectif'])} $ · Stop ≈ {approx(ordre['stop'])} $",
+        f"Quantité {ordre['quantite']:g} (≈ {montant:.0f} €) · Risque ≈ {risque:.0f} €",
+        "Valable 3 séances (3 jours de bourse, 15h30-22h à Paris)",
         "",
         "Pourquoi Claude achète :",
         detailler(ordre["justification"]),
