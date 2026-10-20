@@ -21,7 +21,7 @@ def message_signal(ordre, taux_eurusd):
     return "\n".join([
         f"🟢 SIGNAL BUY — {titre(ordre)} ({LIBELLES.get(ordre['configuration'], ordre['configuration'])})",
         f"Entrée {ordre['entree']:.2f} $ · Objectif {ordre['objectif']:.2f} $ · Stop {ordre['stop']:.2f} $",
-        f"Quantité {ordre['quantite']} · Risque {risque:.2f} € · Valable 3 séances",
+        f"Quantité {ordre['quantite']:g} · Risque {risque:.2f} € · Valable 3 séances",
         "",
         "Pourquoi Claude achète :",
         detailler(ordre["justification"]),

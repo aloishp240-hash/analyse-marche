@@ -16,13 +16,14 @@ def etat_neuf():
 
 
 def test_quantite_risque_et_plafond():
-    assert quantite(99.5, 96.5, 3000, 1.0, p) == 6    # plafond 600 $ < risque (10 actions)
+    assert quantite(99.5, 96.5, 3000, 1.0, p) == 6.03    # plafond 600 $ < risque (10 actions)
     assert quantite(200, 190, 3000, 1.0, p) == 3
-    assert quantite(5000, 4800, 3000, 1.0, p) == 0    # titre trop cher
+    assert quantite(5000, 4800, 3000, 1.0, p) == 0.12    # fraction d'un titre cher
+    assert quantite(10 ** 6, 9 * 10 ** 5, 3000, 1.0, p) == 0  # moins d'un centième d'action
 
 
 def test_quantite_convertit_les_euros_en_dollars():
-    assert quantite(100, 90, 3000, 1.5, p) == 4       # risque 45 $ / 10 $ = 4
+    assert quantite(100, 90, 3000, 1.5, p) == 4.5     # risque 45 $ / 10 $ = 4,5
 
 
 def test_capital_courant():
@@ -48,7 +49,7 @@ def test_refus():
 def test_ajouter_ordre():
     etat = etat_neuf()
     ordre = ajouter_ordre(etat, CANDIDAT, "Logiciels", "Tendance intacte.", date(2026, 10, 19), 1.0, p)
-    assert ordre["quantite"] == 6 and ordre["industrie"] == "Logiciels"
+    assert ordre["quantite"] == 6.03 and ordre["industrie"] == "Logiciels"
     assert ordre["date_signal"] == ordre["traite_jusqu_au"] == "2026-10-19" and ordre["seances"] == 0
     assert etat["ordres"] == [ordre] and etat["debut"] == "2026-10-19"
     with pytest.raises(ValueError):

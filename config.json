@@ -19,6 +19,7 @@
     "capital_initial": 3000,
     "risque_pct": 1,
     "plafond_position_pct": 20,
+    "decimales_quantite": 2,
     "positions_max": 5,
     "par_industrie_max": 2,
     "candidats_max": 5,

@@ -63,7 +63,7 @@ def main(argv=None):
         print(f"refusé : taux EUR/USD indisponible ({erreur})")
         return 0
     attente.ajouter(EN_ATTENTE, message_signal(ordre, taux), etat)
-    print(f"signal enregistré : {ticker}, {ordre['quantite']} actions, entrée {ordre['entree']:.2f} $ "
+    print(f"signal enregistré : {ticker}, {ordre['quantite']:g} action(s), entrée {ordre['entree']:.2f} $ "
           "(envoyé sur Telegram à la fin de la session)")
     return 0
 

@@ -27,10 +27,13 @@ def capital_courant(etat):
 
 
 def quantite(entree, stop, capital_eur, taux_eurusd, p):
-    """Actions entières : 1 % de risque jusqu'au stop, sans dépasser 20 % du capital."""
+    """Actions, fractions comprises (arrondi inférieur à decimales_quantite) : 1 % de risque jusqu'au stop,
+    sans dépasser 20 % du capital."""
     risque_usd = capital_eur * p["risque_pct"] / 100 * taux_eurusd
     plafond_usd = capital_eur * p["plafond_position_pct"] / 100 * taux_eurusd
-    return max(0, min(math.floor(risque_usd / (entree - stop) + 1e-9), math.floor(plafond_usd / entree + 1e-9)))
+    echelle = 10 ** p["decimales_quantite"]
+    brute = min(risque_usd / (entree - stop), plafond_usd / entree)
+    return max(0, round(math.floor(brute * echelle + 1e-9) / echelle, p["decimales_quantite"]))
 
 
 def _engage_eur(etat, taux_eurusd):
@@ -42,7 +45,7 @@ def verifier_ajout(etat, ticker, industrie, quantite, entree, taux_eurusd, p):
     """Motif de refus, ou None si l'ordre peut être ajouté."""
     suivis = etat["ordres"] + etat["positions"]
     if quantite <= 0:
-        return "titre trop cher pour le plafond par position"
+        return "quantité nulle pour le plafond par position"
     if any(e["ticker"] == ticker for e in suivis):
         return f"{ticker} déjà en ordre ou en position"
     if len(suivis) >= p["positions_max"]:
