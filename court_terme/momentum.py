@@ -82,8 +82,9 @@ def executer(etat, ouvertures, taux_eurusd, jour, noms, p):
         etat["liquidites_eur"] += brut - f
         etat["lignes"].remove(ligne)
         ops.append({"date": jour.isoformat(), "type": "vente", "ticker": ligne["ticker"], "nom": ligne["nom"],
-                    "quantite": ligne["quantite"], "prix": round(prix, 2), "montant_eur": round(brut, 2),
-                    "frais_eur": round(f, 2), "resultat_eur": round(brut - f - ligne["cout_eur"], 2)})
+                    "quantite": ligne["quantite"], "prix": round(prix, 2), "prix_entree": ligne["prix_entree"],
+                    "montant_eur": round(brut, 2), "frais_eur": round(f, 2),
+                    "resultat_eur": round(brut - f - ligne["cout_eur"], 2)})
     achats = [t for t in d["achats"] if ouvertures.get(t)]
     for t in achats:
         montant = etat["liquidites_eur"] / (len(achats) - achats.index(t))
@@ -130,28 +131,31 @@ def message_decision(decision, etat, cours, taux_eurusd, noms):
     else:
         lignes.append("Marché : QQQ sous sa moyenne 200 jours → tout en liquidités")
     perfs = {c["ticker"]: c["perf"] for c in decision["classement"]}
+    entrees = {l["ticker"]: l["prix_entree"] for l in etat["lignes"]}
 
-    def liste(tickers):
-        return ", ".join(_titre(t, noms) + (f" {perfs[t]:+.0f} %" if t in perfs else "") for t in tickers)
+    def ligne(t):
+        texte = "• " + _titre(t, noms) + (f" · {perfs[t]:+.0f} % sur 12 mois" if t in perfs else "")
+        if t in entrees and t in cours:
+            return texte + f" · acheté {entrees[t]:.2f} $ → {cours[t]:.2f} $ ({100 * (cours[t] / entrees[t] - 1):+.1f} %)"
+        return texte + (f" · dernier cours {cours[t]:.2f} $" if t in cours else "")
 
     total = valeur(etat, cours, taux_eurusd)
     if decision["ventes"]:
-        lignes.append(f"À vendre à la prochaine ouverture : {liste(decision['ventes'])}")
+        lignes += ["", "🔴 À vendre à la prochaine ouverture :"] + [ligne(t) for t in decision["ventes"]]
     if decision["achats"]:
         gardes = sum(l["quantite"] * cours.get(l["ticker"], l["prix_entree"]) for l in etat["lignes"]
                      if l["ticker"] in decision["conserves"]) / taux_eurusd
-        lignes.append(f"À acheter à la prochaine ouverture (≈ {(total - gardes) / len(decision['achats']):.0f} € "
-                      f"chacun) : {liste(decision['achats'])}")
+        lignes += ["", f"🟢 À acheter à la prochaine ouverture (≈ {(total - gardes) / len(decision['achats']):.0f} € "
+                       f"chacun) :"] + [ligne(t) for t in decision["achats"]]
     if decision["conserves"]:
-        lignes.append(f"Conservés : {liste(decision['conserves'])}")
+        lignes += ["", "⏸ Conservés :"] + [ligne(t) for t in decision["conserves"]]
     if not decision["ventes"] and not decision["achats"]:
         lignes.append("Aucun changement ce mois-ci.")
-    if decision["classement"]:
-        lignes += ["", "Classement 12 mois hors dernier mois :"]
-        lignes += [f"{i}. {_titre(c['ticker'], noms)} {c['perf']:+.0f} %" for i, c in enumerate(decision["classement"], 1)]
     perf = (total / etat["capital_initial"] - 1) * 100
     qqq = etat["historique"][-1]["qqq_pct"] if etat["historique"] else 0.0
-    lignes += ["", f"Portefeuille : {total:.0f} € ({perf:+.1f} %) · QQQ {qqq:+.1f} % sur la même période"]
+    lignes += ["", f"Portefeuille : {total:.0f} € ({perf:+.1f} %) · QQQ {qqq:+.1f} % sur la même période",
+               "Prix réels confirmés à l'exécution. Ni objectif ni stop : un titre n'est revendu qu'à une fin de mois "
+               "où il sort du Top 5, ou si QQQ passe sous sa moyenne 200 jours (vérifié en fin de mois)."]
     return "\n".join(lignes)
 
 
@@ -160,7 +164,8 @@ def message_execution(ops, etat):
     for o in ops:
         t = f"{o['nom']} ({o['ticker']})" if o["nom"] != o["ticker"] else o["ticker"]
         if o["type"] == "vente":
-            lignes.append(f"🔴 Vente {t} : {o['quantite']:g} à {o['prix']:.2f} $ · {o['resultat_eur']:+.2f} €")
+            lignes.append(f"🔴 Vente {t} : {o['quantite']:g} à {o['prix']:.2f} $ (achat {o['prix_entree']:.2f} $, "
+                          f"{100 * (o['prix'] / o['prix_entree'] - 1):+.1f} %) · {o['resultat_eur']:+.2f} € frais compris")
         else:
             lignes.append(f"🟢 Achat {t} : {o['quantite']:g} à {o['prix']:.2f} $ (≈ {o['montant_eur']:.0f} €)")
     lignes.append(f"Frais : {sum(o['frais_eur'] for o in ops):.2f} € · liquidités restantes {etat['liquidites_eur']:.2f} €")

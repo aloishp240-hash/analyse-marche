@@ -236,7 +236,7 @@ Un second portefeuille **fictif** de 3 000 €, suivi à côté du premier pour 
 - **Classement** : chaque fin de mois, performance des titres du Nasdaq 100 sur 12 mois **hors dernier mois** (clôtures ajustées des dividendes ; un titre sans historique complet sur la période est écarté).
 - **Filtre de marché** : si QQQ est sous sa moyenne 200 jours, tout est vendu et le portefeuille reste en liquidités jusqu'à la fin de mois suivante.
 - **Sélection** : les 5 premiers. Un titre déjà détenu qui reste dans le Top 5 est conservé sans rééquilibrage ; les liquidités sont réparties à parts égales entre les entrants.
-- **Horaires** : décision après 16h15 New York le dernier jour ouvré du mois (message Telegram « 🔄 ROTATION MOMENTUM ») ; exécution à l'ouverture suivante, au prix de la première bougie de 5 min, après 9h35 (message « ✅ ROTATION MOMENTUM EXÉCUTÉE »). Une fin de mois manquée (jour férié, panne) est rattrapée à la séance suivante.
+- **Horaires** : décision après 16h15 New York le dernier jour ouvré du mois ; exécution à l'ouverture suivante, au prix de la première bougie de 5 min, après 9h35. Rien n'est envoyé sur Telegram : on suit ce portefeuille sur le tableau de bord. Une fin de mois manquée (jour férié, panne) est rattrapée à la séance suivante.
 - **Frais** : 1 € + 0,1 % par ordre ; liquidités en euros, conversion au taux EURUSD du jour.
 - **Suivi** : valeur relevée chaque soir après la clôture, comparée à QQQ depuis son ouverture le jour du premier achat.
 - **Démarrage** : première décision le vendredi 30 octobre 2026, premiers achats le lundi 2 novembre.

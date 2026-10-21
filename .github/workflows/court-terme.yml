@@ -48,12 +48,9 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      # Second portefeuille fictif : rotation momentum mensuelle (décision en fin de mois, exécution à l'ouverture)
+      # Second portefeuille fictif : rotation momentum mensuelle, sans Telegram (suivi sur le tableau de bord)
       - if: ${{ !cancelled() && !inputs.test }}
         run: python momentum.py
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       # Lancé même si le suivi a échoué ; l'état est commité même si l'une des étapes a échoué.
       - if: ${{ !cancelled() && !inputs.test }}
         run: python agent.py

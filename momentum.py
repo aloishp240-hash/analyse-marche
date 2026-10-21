@@ -2,10 +2,12 @@
 """Portefeuille fictif momentum : décision de fin de mois après la clôture, exécution à l'ouverture suivante.
 
 Lancé toutes les 5 minutes par GitHub Actions, à côté de positions.py ; sort aussitôt s'il n'y a rien à faire.
+N'envoie rien sur Telegram : les messages ne vont que dans le journal du workflow ; on suit le portefeuille
+sur le tableau de bord.
 Après la clôture de chaque séance, relève aussi la valeur du portefeuille pour la courbe du tableau de bord.
 Usage : python momentum.py [--force] [--dry-run]
   --force    décide tout de suite sur la dernière séance, même hors fin de mois
-  --dry-run  affiche les messages sans les envoyer ni sauver l'état
+  --dry-run  ne sauve pas l'état
 """
 import argparse
 import copy
@@ -19,7 +21,7 @@ from commun import INDICE, NY, charger_config, charger_tickers, nom_societe
 from court_terme.momentum import (classement, decider, doit_decider, executer, message_decision, message_execution,
                                   nouvel_etat, relever, valeur)
 from court_terme.portefeuille import sauver
-from positions import envoyer, taux_eurusd
+from positions import taux_eurusd
 from surveillance import seance_ouverte
 
 ETAT = Path(__file__).resolve().parent / "agent" / "momentum.json"
@@ -57,7 +59,7 @@ def noms_de(tickers):
     return noms
 
 
-def executer_decision(etat, maintenant, p, dry_run):
+def executer_decision(etat, maintenant, p):
     d = etat["decision"]
     ouv = ouvertures(d["ventes"] + d["achats"] + [INDICE], maintenant.date())
     if INDICE not in ouv:
@@ -68,10 +70,10 @@ def executer_decision(etat, maintenant, p, dry_run):
     noms = {l["ticker"]: l["nom"] for l in etat["lignes"]} | {c["ticker"]: c["nom"] for c in d["classement"]}
     etat["qqq_depart"] = etat["qqq_depart"] or ouv[INDICE]
     ops = executer(etat, ouv, taux_eurusd(), maintenant.date(), noms, p)
-    envoyer(message_execution(ops, etat), dry_run)
+    print(message_execution(ops, etat))
 
 
-def apres_cloture(etat, maintenant, p, force, dry_run):
+def apres_cloture(etat, maintenant, p, force):
     decide = force or doit_decider(etat, maintenant.date())
     if not decide and not etat["lignes"]:
         etat["dernier_releve"] = maintenant.date().isoformat()
@@ -95,7 +97,8 @@ def apres_cloture(etat, maintenant, p, force, dry_run):
     porteur, meilleurs = classement(clotures[tickers], clotures[INDICE].dropna(), p)
     noms = noms_de(sorted({t for t, _ in meilleurs} | set(detenus)))
     decision = decider(etat, porteur, meilleurs, jour, noms)
-    envoyer(message_decision(decision, etat, cours, taux, noms), dry_run)
+    cours |= {t: float(clotures[t].dropna().iloc[-1]) for t in decision["achats"]}  # dernière clôture, pour info
+    print(message_decision(decision, etat, cours, taux, noms))
 
 
 def main():
@@ -111,10 +114,10 @@ def main():
 
     if (etat["decision"] and seance_ouverte(maintenant) and maintenant.time() >= DEBUT_EXECUTION
             and etat["decision"]["date"] < maintenant.date().isoformat()):
-        executer_decision(etat, maintenant, p, args.dry_run)
+        executer_decision(etat, maintenant, p)
     elif args.force or (maintenant.weekday() < 5 and maintenant.time() >= HEURE_RELEVE
                         and etat["dernier_releve"] != maintenant.date().isoformat()):
-        apres_cloture(etat, maintenant, p, args.force, args.dry_run)
+        apres_cloture(etat, maintenant, p, args.force)
 
     if etat != avant and not args.dry_run:
         sauver(etat, ETAT)

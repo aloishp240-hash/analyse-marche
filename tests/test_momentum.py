@@ -91,14 +91,15 @@ def test_repartition_egale():
 def test_messages():
     etat = etat_investi()
     d = m.decider(etat, True, [("AAA", 50.0), ("CCC", 40.0)], date(2026, 10, 30), {"AAA": "Aaa", "CCC": "Ccc"})
-    texte = m.message_decision(d, etat, {"AAA": 110, "BBB": 60}, 1.0, {"AAA": "Aaa", "CCC": "Ccc"})
+    texte = m.message_decision(d, etat, {"AAA": 110, "BBB": 60, "CCC": 12.5}, 1.0, {"AAA": "Aaa", "CCC": "Ccc"})
     assert texte.startswith("🔄 ROTATION MOMENTUM — fin octobre 2026\n")
-    assert "À vendre à la prochaine ouverture : BBB" in texte
-    assert "À acheter à la prochaine ouverture (≈ 400 € chacun) : Ccc (CCC) +40 %" in texte   # 1500 − 1100 gardés
-    assert "Conservés : Aaa (AAA) +50 %" in texte
-    assert "Portefeuille : 1500 € (-50.0 %)" in texte
+    assert "À vendre à la prochaine ouverture :\n• BBB · acheté 50.00 $ → 60.00 $ (+20.0 %)" in texte
+    assert ("À acheter à la prochaine ouverture (≈ 400 € chacun) :\n"            # 1500 − 1100 gardés
+            "• Ccc (CCC) · +40 % sur 12 mois · dernier cours 12.50 $") in texte
+    assert "Conservés :\n• Aaa (AAA) · +50 % sur 12 mois · acheté 100.00 $ → 110.00 $ (+10.0 %)" in texte
+    assert "Portefeuille : 1500 € (-50.0 %)" in texte and "Ni objectif ni stop" in texte
     rattrapage = m.decider(etat, False, [], date(2026, 11, 2), {})
     assert "fin octobre 2026 (rattrapage)" in m.message_decision(rattrapage, etat, {}, 1.0, {})
     ops = m.executer(etat, {"AAA": 100.0, "BBB": 50.0}, 1.0, date(2026, 11, 3), {}, p)
     texte = m.message_execution(ops, etat)
-    assert "🔴 Vente Aaa (AAA) : 10 à 100.00 $" in texte and "Frais :" in texte
+    assert "🔴 Vente Aaa (AAA) : 10 à 100.00 $ (achat 100.00 $, +0.0 %)" in texte and "Frais :" in texte
