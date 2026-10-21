@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import date, timedelta
 
 import numpy as np
@@ -551,3 +552,82 @@ def test_actions_en_circulation_demande_le_point_de_classe_avec_un_tiret(tmp_pat
     assert actions_en_circulation(["BRK.B"], tmp_path) == {"BRK.B": 2e9}
     assert faux.appels_ticker == ["BRK-B"]
     assert json.loads((tmp_path / "actions.json").read_text()) == {"BRK.B": 2e9}
+
+
+class SilencieuxYf(FauxYf):
+    """yfinance 1.x en cas de limite de débit : download ne lève rien, renvoie un tableau vide et journalise l'erreur
+    sur le logger « yfinance » ; Ticker(...).fast_info n'a pas de valeur et journalise de même."""
+    def __init__(self, series, limites_restantes, limites=("AAA",), actions=None):
+        super().__init__(series, actions)
+        self.restantes, self.limites = limites_restantes, list(limites)
+
+    def _journaliser(self, noms):
+        logging.getLogger("yfinance").error(f"{noms}: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')")
+
+    def download(self, tickers, **options):
+        self.appels_download.append((list(tickers), options))
+        if self.restantes > 0:
+            self.restantes -= 1
+            self._journaliser([t for t in tickers if t in self.limites])
+            return pd.DataFrame()
+        morceaux = {t: self.series[t] for t in tickers if t in self.series}
+        return pd.concat(morceaux, axis=1) if morceaux else pd.DataFrame()
+
+    def Ticker(self, ticker):
+        self.appels_ticker.append(ticker)
+        if self.restantes > 0:
+            self.restantes -= 1
+            self._journaliser([ticker])
+            return type("T", (), {"fast_info": {"shares": None}})()
+        return super().Ticker(ticker)
+
+
+def test_charger_detecte_la_limite_journalisee_sans_exception_puis_reprend(tmp_path, monkeypatch):
+    faux = SilencieuxYf({"AAA": _serie(), "BBB": _serie()}, limites_restantes=1, limites=("AAA", "BBB"))
+    monkeypatch.setattr(module_cours, "yf", faux)
+    pauses, limites = [], set()
+    resultat = charger(["AAA", "BBB"], date(2030, 1, 2), date(2030, 2, 20), tmp_path, attendre=pauses.append,
+                       limites=limites)
+    assert set(resultat) == {"AAA", "BBB"} and not limites
+    assert pauses == [30] and len(faux.appels_download) == 2
+
+
+def test_charger_limite_persistante_est_comptee_a_part_des_titres_sans_donnees(tmp_path, monkeypatch):
+    faux = SilencieuxYf({}, limites_restantes=100, limites=("AAA",))
+    monkeypatch.setattr(module_cours, "yf", faux)
+    pauses, limites = [], set()
+    resultat = charger(["AAA"], date(2030, 1, 2), date(2030, 2, 20), tmp_path, attendre=pauses.append, limites=limites)
+    assert resultat == {} and limites == {"AAA"}
+    assert pauses == [30, 60, 120] and len(faux.appels_download) == 4
+    # un titre sans données, sans message de limite, n'est pas compté comme limité et n'attend pas
+    sans_limite = FauxYf({})
+    monkeypatch.setattr(module_cours, "yf", sans_limite)
+    pauses, limites = [], set()
+    assert charger(["ZZZ"], date(2030, 1, 2), date(2030, 2, 20), tmp_path, attendre=pauses.append, limites=limites) == {}
+    assert pauses == [] and limites == set()
+
+
+def test_charger_ignore_l_avertissement_de_cookie_de_yfinance(tmp_path, monkeypatch):
+    faux = FauxYf({})
+
+    def download(tickers, **options):
+        logging.getLogger("yfinance").warning("Crumb fetch rate-limited (HTTP 429), continuing without crumb")
+        return pd.DataFrame()
+    monkeypatch.setattr(faux, "download", download)
+    monkeypatch.setattr(module_cours, "yf", faux)
+    pauses, limites = [], set()
+    assert charger(["ZZZ"], date(2030, 1, 2), date(2030, 2, 20), tmp_path, attendre=pauses.append, limites=limites) == {}
+    assert pauses == [] and limites == set()
+
+
+def test_actions_detecte_la_limite_journalisee_sans_exception(tmp_path, monkeypatch):
+    faux = SilencieuxYf({}, limites_restantes=1, actions={"AAA": 5e8})
+    monkeypatch.setattr(module_cours, "yf", faux)
+    pauses, limites = [], set()
+    assert actions_en_circulation(["AAA"], tmp_path, attendre=pauses.append, limites=limites) == {"AAA": 5e8}
+    assert pauses == [30] and not limites
+    faux = SilencieuxYf({}, limites_restantes=100, actions={"BBB": 5e8})
+    monkeypatch.setattr(module_cours, "yf", faux)
+    pauses, limites = [], set()
+    assert actions_en_circulation(["BBB"], tmp_path, attendre=pauses.append, limites=limites) == {}
+    assert pauses == [30, 60, 120] and limites == {"BBB"}

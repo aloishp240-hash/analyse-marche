@@ -1,4 +1,5 @@
 """Rapport Markdown du test sur le passé : liste proposée, classement, dirigeants, portefeuille et limites des données."""
+import math
 from collections import Counter
 
 import pandas as pd
@@ -32,7 +33,11 @@ def _part(valeur):
 
 
 def _jours(valeur):
-    return "—" if valeur is None else f"{_nombre(valeur)} j"  # une décimale : la règle est « moins de 30 jours »
+    if valeur is None:
+        return "—"
+    # tronqué (et non arrondi) à une décimale : 29,96 j s'affiche « 29,9 j », pas « 30,0 j », qui contredirait la règle
+    # « moins de 30 jours »
+    return f"{_nombre(math.floor(round(valeur * 10, 6)) / 10)} j"
 
 
 def _dollars(valeur):
@@ -164,11 +169,13 @@ def _donnees(lecture):
                       "ignorés.")
     for cle, texte in (("ticker_illisible", "dont le ticker est illisible (crochets, plusieurs titres, espaces...) : "
                                             "jamais envoyés à Yahoo, leurs achats ne sont ni mesurés ni copiés"),
+                       ("limite_yahoo", "que Yahoo a refusé de servir (limite de débit) malgré les reprises : "
+                                        "ils ne sont pas comptés « sans cours », la proposition est incomplète"),
                        ("sans_cours", "sans cours (Yahoo n'en a pas, ou ils ne sont pas gardés) : leurs achats ne sont "
                                       "ni mesurés ni copiés"),
                        ("sans_actions", "sans nombre d'actions : leurs achats sortent de l'univers")):
         m = lecture.get(cle)
-        if m is not None:
+        if m is not None and (m.get("nombre") or cle != "limite_yahoo"):
             exemples = f" (par exemple {', '.join(m['exemples'])})" if m.get("exemples") else ""
             lignes.append(f"- {_pluriel(m['nombre'], 'titre', 'titres')} {texte}{exemples}.")
     sans_13f = lecture.get("fonds_sans_13f")

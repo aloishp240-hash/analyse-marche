@@ -12,7 +12,7 @@ from commun import charger_config
 from inities import chambre, cours as module_cours, dirigeants, fonds, senat
 from inities.mesure import bilan
 from inities.modele import Operation
-from inities.rapport import AVERTISSEMENT, ecrire
+from inities.rapport import AVERTISSEMENT, _jours, ecrire
 from inities.sec import ErreurSec
 
 DATE_CHOIX = date(2026, 10, 21)
@@ -243,7 +243,7 @@ def faux(monkeypatch):
     monkeypatch.setattr(senat, "telecharger", lambda *a, **k: pytest.fail("le Sénat ne doit pas être lu"))
     monkeypatch.setattr(fonds, "telecharger", lambda client, debut, dossier, p=None: ([], 3))
     monkeypatch.setattr(module_cours, "charger", _cours_faux)
-    monkeypatch.setattr(module_cours, "actions_en_circulation", lambda tickers, dossier: {t: 1e9 for t in tickers})
+    monkeypatch.setattr(module_cours, "actions_en_circulation", lambda tickers, dossier, **_: {t: 1e9 for t in tickers})
     monkeypatch.setattr(dirigeants, "lire_jeu", lambda octets: [])
 
 
@@ -427,7 +427,7 @@ def test_titres_sans_cours_et_sans_actions_sont_comptes(tmp_path, faux, monkeypa
                         lambda tickers, debut, fin, dossier, **_: {t: df for t, df in _cours_faux(
                             tickers, debut, fin, dossier).items() if t != "ZZZ"})
     monkeypatch.setattr(module_cours, "actions_en_circulation",
-                        lambda tickers, dossier: {t: 1e9 for t in tickers if t != "BBB"})
+                        lambda tickers, dossier, **_: {t: 1e9 for t in tickers if t != "BBB"})
     assert _lancer(tmp_path) == 0
     donnees = (tmp_path / "rapport_copie.md").read_text().split("## Données")[1]
     assert "1 titre sans cours" in donnees and "par exemple ZZZ" in donnees
@@ -522,3 +522,56 @@ def test_tickers_illisibles_jamais_envoyes_a_yahoo_et_comptes(tmp_path, faux, mo
     assert "7 titres dont le ticker est illisible" in donnees
     assert "(par exemple BBXIA/B, HEI, HEI.A, LEN, LEN.B, N O G, N.A.)" in donnees  # 5 exemples, par ordre
     assert "7 ticker illisible (par exemple " in capsys.readouterr().out
+
+
+def test_limite_yahoo_persistante_rend_la_proposition_incomplete_et_n_est_pas_sans_cours(tmp_path, faux, monkeypatch,
+                                                                                         capsys):
+    ops = _achats_gagnants() + [_op("ZZZ", date(2026, 1, 5), "politicien:chambre:Martin|Paul|NY-01")]
+    monkeypatch.setattr(chambre, "telecharger", lambda annees, dossier, session=None: (ops, 90, 10))
+
+    def charger(tickers, debut, fin, dossier, limites=None, **_):
+        if limites is not None and "ZZZ" in tickers:
+            limites.add("ZZZ")  # Yahoo a limité le débit jusqu'au bout des reprises
+        return {t: df for t, df in _cours_faux(tickers, debut, fin, dossier).items() if t != "ZZZ"}
+    monkeypatch.setattr(module_cours, "charger", charger)
+    assert _lancer(tmp_path) == 1
+    proposition = json.loads((tmp_path / "copie" / "proposition.json").read_text())
+    assert proposition["complet"] is False and "cours Yahoo (limite de débit)" in proposition["sources_en_echec"]
+    donnees = (tmp_path / "rapport_copie.md").read_text().split("## Données")[1]
+    assert "1 titre que Yahoo a refusé de servir" in donnees and "par exemple ZZZ" in donnees
+    assert "titre sans cours" in donnees and "0 titre sans cours" in donnees
+    sortie = capsys.readouterr().out
+    assert "0 sans cours ; 0 sans nombre d'actions ; 0 ticker illisible ; 1 limite Yahoo (par exemple ZZZ)" in sortie
+    assert "source(s) en échec : cours Yahoo (limite de débit)" in sortie
+    assert backtest_copie.valider(tmp_path / "copie") == 1
+    assert not (tmp_path / "copie" / "suivis.json").exists()
+
+
+def test_limite_yahoo_sur_les_nombres_d_actions_aussi(tmp_path, faux, monkeypatch):
+    def actions(tickers, dossier, limites=None, **_):
+        limites.add("AAA")
+        return {}
+    monkeypatch.setattr(module_cours, "actions_en_circulation", actions)
+    assert _lancer(tmp_path) == 1
+    proposition = json.loads((tmp_path / "copie" / "proposition.json").read_text())
+    assert proposition["complet"] is False
+    donnees = (tmp_path / "rapport_copie.md").read_text().split("## Données")[1]
+    assert "sans nombre d'actions" in donnees and "0 titre sans nombre d'actions" in donnees
+
+
+def test_analyse_en_echec_retire_l_ancienne_proposition(tmp_path, faux, monkeypatch, capsys):
+    ancienne = tmp_path / "copie" / "proposition.json"
+    ancienne.parent.mkdir()
+    ancienne.write_text(json.dumps({"date_choix": "2026-09-01", "complet": True, "sources_en_echec": [],
+                                    "personnes": [{"personne_id": "x", "personne": "X", "famille": "politicien"}]}))
+    monkeypatch.setattr(module_cours, "charger", lambda tickers, debut, fin, dossier, **_: {})  # QQQ introuvable
+    assert _lancer(tmp_path) == 1
+    assert "QQQ introuvables" in capsys.readouterr().out
+    assert not ancienne.exists()
+    assert backtest_copie.valider(tmp_path / "copie") == 1
+    assert not (tmp_path / "copie" / "suivis.json").exists()
+
+
+def test_jours_ne_contredit_pas_la_regle_moins_de_30_jours():
+    assert _jours(29.96) == "29,9 j" and _jours(29.7) == "29,7 j" and _jours(29.6) == "29,6 j"
+    assert _jours(30.0) == "30,0 j" and _jours(None) == "—" and _jours(0.04) == "0,0 j"

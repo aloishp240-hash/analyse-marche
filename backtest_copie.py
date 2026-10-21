@@ -29,6 +29,7 @@ DEBUT_SIMULATION = date(2025, 10, 1)
 DEBUT_DECLARATIONS = date(2024, 1, 1)
 DEBUT_COURS = date(2023, 11, 15)  # de quoi calculer l'univers (20 séances) des premières publications de 2024
 PREMIER_TRIMESTRE = (2024, 1)
+SOURCE_LIMITE = "cours Yahoo (limite de débit)"
 EXEMPLES = 5  # titres cités comme exemples quand des cours ou des nombres d'actions manquent
 
 
@@ -244,10 +245,11 @@ def _actions_du_cache(tickers, dossier):
     return {t: connues[t] for t in tickers if t in connues} if isinstance(connues, dict) else {}
 
 
-def _charger_cours(tickers, debut, fin, dossier, hors_ligne=False):
+def _charger_cours(tickers, debut, fin, dossier, hors_ligne=False, limites=None):
+    """Cours des tickers ; `limites` reçoit ceux que Yahoo limite encore après les reprises (jamais hors ligne)."""
     if hors_ligne:
         return _cours_du_cache(tickers, debut, fin, dossier)
-    return cours.charger(tickers, debut, fin, dossier,
+    return cours.charger(tickers, debut, fin, dossier, limites=limites,
                          progres=lambda faits, total: print(f"  cours : lot {faits}/{total}", flush=True))
 
 
@@ -267,6 +269,8 @@ def _ligne_titres(lecture):
                 _phrase_manquants("sans nombre d'actions", lecture["sans_actions"])]
     if "ticker_illisible" in lecture:
         morceaux.append(_phrase_manquants("ticker illisible", lecture["ticker_illisible"]))
+    if lecture.get("limite_yahoo", {}).get("nombre"):
+        morceaux.append(_phrase_manquants("limite Yahoo", lecture["limite_yahoo"]))
     return "Titres : " + " ; ".join(morceaux)
 
 
@@ -298,6 +302,18 @@ def _nettoyer_tickers(ops, debut_simulation, date_choix, p):
     return nettes, sorted(utiles), illisibles
 
 
+def _noter_limite_yahoo(lecture, limites):
+    """Les titres que Yahoo limite encore après les reprises ne sont pas des titres « sans données » : on les compte à
+    part et on ajoute une source en échec, ce qui rend la proposition incomplète (--valider la refuse)."""
+    lecture["limite_yahoo"] = _manquants(limites)
+    sources = [s for s in lecture.get("sources", []) if s.get("nom") != SOURCE_LIMITE]
+    if limites:
+        n = len(limites)
+        sources.append({"nom": SOURCE_LIMITE, "etat": "echec",
+                        "detail": f"{n} titre{'s' if n > 1 else ''} sans réponse malgré les reprises"})
+    lecture["sources"] = sources
+
+
 def analyser(ops, lecture, p, date_choix, debut_simulation, dossier, hors_ligne=False):
     """(classement, bilan des dirigeants, résultats des deux simulations) ; complète `lecture`. Hors ligne, rien n'est
     demandé à Yahoo : les titres absents du cache sont comptés sans cours."""
@@ -306,19 +322,22 @@ def analyser(ops, lecture, p, date_choix, debut_simulation, dossier, hors_ligne=
     ops, tickers, illisibles = _nettoyer_tickers(brutes, debut_simulation, date_choix, p)
     lecture["ticker_illisible"] = _manquants(illisibles)
     print(f"Cours : {len(tickers)} titres, QQQ et EURUSD", flush=True)
-    reference = _charger_cours(["QQQ", "EURUSD=X"], DEBUT_COURS, date_choix, dossier_cours, hors_ligne)
+    limites_cours, limites_actions = set(), set()
+    reference = _charger_cours(["QQQ", "EURUSD=X"], DEBUT_COURS, date_choix, dossier_cours, hors_ligne, limites_cours)
     qqq = reference.get("QQQ")
     if qqq is None:
-        raise RuntimeError("cours de QQQ introuvables" + (" dans le cache" if hors_ligne else "")
-                           + " : impossible de comparer")
+        raise RuntimeError("cours de QQQ introuvables"
+                           + (" dans le cache" if hors_ligne else " (limite de débit de Yahoo)"
+                              if "QQQ" in limites_cours else "") + " : impossible de comparer")
     eurusd = reference.get("EURUSD=X")
     lecture["eurusd_absent"] = eurusd is None
-    historique = _charger_cours(tickers, DEBUT_COURS, date_choix, dossier_cours, hors_ligne)
+    historique = _charger_cours(tickers, DEBUT_COURS, date_choix, dossier_cours, hors_ligne, limites_cours)
     avec_cours = [t for t in tickers if t in historique]
     actions = (_actions_du_cache(avec_cours, dossier_cours) if hors_ligne
-               else cours.actions_en_circulation(avec_cours, dossier_cours))
-    lecture["sans_cours"] = _manquants(set(tickers) - set(avec_cours))
-    lecture["sans_actions"] = _manquants({t for t in avec_cours if t not in actions})
+               else cours.actions_en_circulation(avec_cours, dossier_cours, limites=limites_actions))
+    lecture["sans_cours"] = _manquants(set(tickers) - set(avec_cours) - limites_cours)
+    lecture["sans_actions"] = _manquants({t for t in avec_cours if t not in actions} - limites_actions)
+    _noter_limite_yahoo(lecture, limites_cours | limites_actions)
     print(_ligne_titres(lecture), flush=True)
     classement = mesure.selectionner(ops, historique, qqq, actions, date_choix, p)
     bilan_dirigeants = mesure.bilan_dirigeants(ops, historique, qqq, actions, date_choix, p)
@@ -374,7 +393,11 @@ def lancer(sans_telechargement=False, config=None, dossier_donnees=DONNEES, doss
     try:
         classement, bilan_dirigeants, resultats = analyser(ops, lecture, p, date_choix, debut_simulation,
                                                            dossier_donnees, hors_ligne=sans_telechargement)
-    except RuntimeError as erreur:
+    except Exception as erreur:
+        # une ancienne proposition ne doit pas rester validable alors que cette analyse n'a pas abouti
+        (dossier_copie / "proposition.json").unlink(missing_ok=True)
+        if not isinstance(erreur, RuntimeError):
+            raise
         print(f"Arrêt : {erreur}")
         return 1
     retenus = _ecrire_resultats(classement, bilan_dirigeants, resultats, lecture, date_choix, dossier_copie,
