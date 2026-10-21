@@ -51,11 +51,11 @@ class ClientSec:
             if reste > 0:
                 time.sleep(reste)
 
-    def texte(self, url, cache=False):
-        """Contenu de la page, ou None si elle n'existe pas (404)."""
+    def octets(self, url, cache=False):
+        """Contenu brut de la page, ou None si elle n'existe pas (404)."""
         fichier = self._fichier_cache(url) if cache else None
         if fichier is not None and fichier.exists():
-            return fichier.read_text(encoding="utf-8")
+            return fichier.read_bytes()
         self._attendre()
         try:
             reponse = self.session.request("GET", url, headers=self._entetes, timeout=DELAI)
@@ -69,8 +69,13 @@ class ClientSec:
             raise ErreurSec(f"la SEC a répondu {reponse.status_code} pour {url}")
         if fichier is not None:
             fichier.parent.mkdir(parents=True, exist_ok=True)
-            fichier.write_text(reponse.text, encoding="utf-8")
-        return reponse.text
+            fichier.write_bytes(reponse.content)
+        return reponse.content
+
+    def texte(self, url, cache=False):
+        """Contenu de la page décodé en UTF-8, ou None si elle n'existe pas (404)."""
+        contenu = self.octets(url, cache=cache)
+        return None if contenu is None else contenu.decode("utf-8", errors="replace")
 
     def json(self, url, cache=False):
         contenu = self.texte(url, cache=cache)
@@ -79,4 +84,6 @@ class ClientSec:
         try:
             return jsonlib.loads(contenu)
         except ValueError:
+            if cache:  # un contenu illisible ne doit pas rester en cache : le passage suivant retélécharge
+                self._fichier_cache(url).unlink(missing_ok=True)
             raise ErreurSec(f"réponse de la SEC illisible pour {url}") from None
