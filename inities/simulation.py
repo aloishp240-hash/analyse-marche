@@ -131,6 +131,13 @@ def _ordre_du_jour(ops, seances, debut):
     return par_seance
 
 
+def trier_par_priorite(achats, en_groupe):
+    """Achats triés quand les places manquent : publication la plus ancienne, puis achats groupés de dirigeants
+    (source_id dans en_groupe), puis montant le plus élevé."""
+    return sorted(achats, key=lambda op: (op.date_publication, op.source_id not in en_groupe, -op.montant_min,
+                                          op.source_id))
+
+
 def _candidats(achats, suivis, retenus_connus, cours, actions, p):
     """(achats copiables ce jour, triés par priorité : publication la plus ancienne, puis achats groupés de
     dirigeants, puis montant le plus élevé ; achats écartés car hors univers ou sans cours)."""
@@ -149,8 +156,7 @@ def _candidats(achats, suivis, retenus_connus, cours, actions, p):
     en_groupe = set()
     if len(candidats) > 1 and any(achat_retenu(op, p) for op in candidats):
         en_groupe = groupes(retenus_connus, p)
-    candidats.sort(key=lambda op: (op.date_publication, op.source_id not in en_groupe, -op.montant_min, op.source_id))
-    return candidats, hors_univers
+    return trier_par_priorite(candidats, en_groupe), hors_univers
 
 
 def simuler(ops, cours, qqq, actions, debut, fin, p, frais):
