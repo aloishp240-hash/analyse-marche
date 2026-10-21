@@ -1,0 +1,77 @@
+{
+ "2": {
+  "cik_str": 1652044,
+  "ticker": "GOOGL",
+  "title": "Alphabet Inc."
+ },
+ "3": {
+  "cik_str": 789019,
+  "ticker": "MSFT",
+  "title": "MICROSOFT CORP"
+ },
+ "4": {
+  "cik_str": 1018724,
+  "ticker": "AMZN",
+  "title": "AMAZON COM INC"
+ },
+ "5": {
+  "cik_str": 1326801,
+  "ticker": "META",
+  "title": "Meta Platforms, Inc."
+ },
+ "110": {
+  "cik_str": 1543151,
+  "ticker": "UBER",
+  "title": "Uber Technologies, Inc"
+ },
+ "210": {
+  "cik_str": 1001085,
+  "ticker": "BN",
+  "title": "BROOKFIELD Corp /ON/"
+ },
+ "223": {
+  "cik_str": 1585689,
+  "ticker": "HLT",
+  "title": "Hilton Worldwide Holdings Inc."
+ },
+ "446": {
+  "cik_str": 1618756,
+  "ticker": "QSR",
+  "title": "Restaurant Brands International Inc."
+ },
+ "1350": {
+  "cik_str": 1654795,
+  "ticker": "BBUC",
+  "title": "Brookfield Business Corp"
+ },
+ "1547": {
+  "cik_str": 1981792,
+  "ticker": "HHH",
+  "title": "Howard Hughes Holdings Inc."
+ },
+ "1849": {
+  "cik_str": 1674168,
+  "ticker": "HGV",
+  "title": "Hilton Grand Vacations Inc."
+ },
+ "2977": {
+  "cik_str": 1657853,
+  "ticker": "HTZ",
+  "title": "HERTZ GLOBAL HOLDINGS, INC"
+ },
+ "3785": {
+  "cik_str": 2009684,
+  "ticker": "SEG",
+  "title": "Seaport Entertainment Group Inc."
+ },
+ "7470": {
+  "cik_str": 1652044,
+  "ticker": "GOOG",
+  "title": "Alphabet Inc."
+ },
+ "9916": {
+  "cik_str": 1657853,
+  "ticker": "HTZWW",
+  "title": "HERTZ GLOBAL HOLDINGS, INC"
+ }
+}
