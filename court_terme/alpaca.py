@@ -4,6 +4,7 @@ Seule l'adresse paper est acceptée : une adresse de compte réel ou une clé de
 bloque le démarrage. Les clés viennent des variables d'environnement (secrets GitHub) puis de .env, et
 n'apparaissent jamais dans un message.
 """
+import math
 import os
 
 import requests
@@ -20,6 +21,13 @@ class ErreurAlpaca(Exception):
 
 def _reglage(nom, env):
     return os.environ.get(nom) or env.get(nom)
+
+
+def _verifier_stop(stop):
+    """Le stop doit être un nombre fini qui reste positif une fois arrondi à 2 décimales."""
+    if isinstance(stop, bool) or not isinstance(stop, (int, float)) or not math.isfinite(stop) \
+            or round(stop, 2) <= 0:
+        raise ErreurAlpaca(f"le stop doit être un nombre fini supérieur à 0 ({stop!r})")
 
 
 class Client:
@@ -85,6 +93,26 @@ class Client:
             "take_profit": {"limit_price": f"{objectif:.2f}"}, "stop_loss": {"stop_price": f"{stop:.2f}"},
             "client_order_id": id_client,
         })
+
+    def passer_oto(self, ticker, quantite, stop, id_client, validite="gtc"):
+        """Achat au marché ; à l'exécution, Alpaca pose le stop lié (sans objectif de gain)."""
+        if isinstance(quantite, bool) or not isinstance(quantite, int) or quantite < 1:
+            raise ErreurAlpaca("un ordre oto demande un nombre entier d'actions (au moins 1)")
+        _verifier_stop(stop)
+        return self._appel("POST", "/v2/orders", json={
+            "symbol": ticker, "qty": str(quantite), "side": "buy", "type": "market",
+            "time_in_force": validite, "order_class": "oto", "stop_loss": {"stop_price": f"{stop:.2f}"},
+            "client_order_id": id_client,
+        })
+
+    def modifier_stop(self, identifiant, stop):
+        """Déplace le prix d'un ordre stop déjà posé."""
+        _verifier_stop(stop)
+        return self._appel("PATCH", f"/v2/orders/{identifiant}", json={"stop_price": f"{stop:.2f}"})
+
+    def fermer_position(self, ticker):
+        """Vend toute la position au marché ; Alpaca répond avec l'ordre de vente (ou rien : {})."""
+        return self._appel("DELETE", f"/v2/positions/{ticker}") or {}
 
     def annuler(self, identifiant):
         self._appel("DELETE", f"/v2/orders/{identifiant}")

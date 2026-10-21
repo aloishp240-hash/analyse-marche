@@ -112,6 +112,73 @@ def test_bracket_refuse_des_niveaux_incoherents(stop, objectif):
     assert c.session.appels == []
 
 
+def test_ordre_oto_bien_forme():
+    c = client(Reponse(contenu={"id": "abc"}))
+    assert c.passer_oto("NVDA", 3, stop=95.456, id_client="cp-1")["id"] == "abc"
+    appel = c.session.appels[0]
+    assert (appel["methode"], appel["url"]) == ("POST", URL_PAPER + "/v2/orders")
+    assert appel["json"] == {
+        "symbol": "NVDA", "qty": "3", "side": "buy", "type": "market", "time_in_force": "gtc",
+        "order_class": "oto", "stop_loss": {"stop_price": "95.46"}, "client_order_id": "cp-1",
+    }
+
+
+def test_ordre_oto_validite_choisie():
+    c = client(Reponse(contenu={"id": "abc"}))
+    c.passer_oto("NVDA", 1, stop=10, id_client="cp-2", validite="day")
+    assert c.session.appels[0]["json"]["time_in_force"] == "day"
+
+
+@pytest.mark.parametrize("quantite", [0, -1, 1.5, 2.0, True, "3", None])
+def test_oto_refuse_quantite_ou_stop_invalides(quantite):
+    c = client()
+    with pytest.raises(ErreurAlpaca, match="entier"):
+        c.passer_oto("NVDA", quantite, stop=95, id_client="x")
+    assert c.session.appels == []
+
+
+@pytest.mark.parametrize("stop", [0, -5, 0.0, float("nan"), float("inf"), True, "95", None])
+def test_oto_refuse_un_stop_invalide(stop):
+    c = client()
+    with pytest.raises(ErreurAlpaca, match="stop"):
+        c.passer_oto("NVDA", 1, stop=stop, id_client="x")
+    assert c.session.appels == []
+
+
+def test_modifier_stop():
+    c = client(Reponse(contenu={"id": "abc", "stop_price": "85.12"}))
+    assert c.modifier_stop("abc", 85.123)["id"] == "abc"
+    appel = c.session.appels[0]
+    assert (appel["methode"], appel["url"]) == ("PATCH", URL_PAPER + "/v2/orders/abc")
+    assert appel["json"] == {"stop_price": "85.12"}
+
+
+@pytest.mark.parametrize("stop", [0, -1, float("nan"), float("inf"), True, "85"])
+def test_modifier_stop_refuse_un_stop_invalide(stop):
+    c = client()
+    with pytest.raises(ErreurAlpaca, match="stop"):
+        c.modifier_stop("abc", stop)
+    assert c.session.appels == []
+
+
+def test_fermer_position():
+    c = client(Reponse(contenu={"id": "ordre-vente", "side": "sell"}))
+    assert c.fermer_position("NVDA")["side"] == "sell"
+    appel = c.session.appels[0]
+    assert (appel["methode"], appel["url"]) == ("DELETE", URL_PAPER + "/v2/positions/NVDA")
+
+
+def test_fermer_position_reponse_sans_corps():
+    c = client(Reponse(code=204))
+    assert c.fermer_position("NVDA") == {}
+
+
+def test_fermer_position_erreur_du_serveur():
+    c = client(Reponse(code=404, contenu={"message": "position does not exist"}))
+    with pytest.raises(ErreurAlpaca, match="404"):
+        c.fermer_position("NVDA")
+
+
 def test_annuler_un_ordre():
     c = client(Reponse(code=204))
     c.annuler("abc")
