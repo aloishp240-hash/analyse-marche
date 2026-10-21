@@ -31,7 +31,7 @@ from inities.mesure import dans_univers, selectionner
 
 FRAIS_FIXE_EUR = 1.0
 FRAIS_PROPORTIONNEL = 0.001
-EURUSD_SECOURS = 1.0  # quand aucun cours EURUSD n'est connu à la date de l'ordre
+EURUSD_SECOURS = 1.0  # seulement quand la série EURUSD est vide
 
 
 def quantite(valeur_compte, cours, p):
@@ -58,7 +58,7 @@ def frais_courtier(eurusd):
         taux = pd.Series(dtype=float)
 
     def frais(montant, jour):
-        cours = EURUSD_SECOURS
+        cours = EURUSD_SECOURS if taux.empty else float(taux.iloc[0])  # avant le premier point : le premier connu
         try:
             i = taux.index.searchsorted(pd.Timestamp(jour), side="right") - 1
             if i >= 0:
@@ -132,9 +132,9 @@ def _ordre_du_jour(ops, seances, debut):
 
 
 def _candidats(achats, suivis, retenus_connus, cours, actions, p):
-    """Achats copiables ce jour, triés par priorité : publication la plus ancienne, puis achats groupés de
-    dirigeants, puis montant le plus élevé."""
-    candidats = []
+    """(achats copiables ce jour, triés par priorité : publication la plus ancienne, puis achats groupés de
+    dirigeants, puis montant le plus élevé ; achats écartés car hors univers ou sans cours)."""
+    candidats, hors_univers = [], []
     for op in achats:
         if achat_retenu(op, p):
             copiable = True
@@ -144,13 +144,13 @@ def _candidats(achats, suivis, retenus_connus, cours, actions, p):
                 op.famille != "politicien" or op.montant_min >= p["politicien_montant_min"])
         else:
             copiable = False
-        if copiable and dans_univers(op, cours, actions, p):
-            candidats.append(op)
+        if copiable:
+            (candidats if dans_univers(op, cours, actions, p) else hors_univers).append(op)
     en_groupe = set()
     if len(candidats) > 1 and any(achat_retenu(op, p) for op in candidats):
         en_groupe = groupes(retenus_connus, p)
     candidats.sort(key=lambda op: (op.date_publication, op.source_id not in en_groupe, -op.montant_min, op.source_id))
-    return candidats
+    return candidats, hors_univers
 
 
 def simuler(ops, cours, qqq, actions, debut, fin, p, frais):
@@ -218,7 +218,10 @@ def simuler(ops, cours, qqq, actions, debut, fin, p, frais):
 
         achats = par_seance.get(i, [])
         connus = retenus[:bisect_left(dates_retenus, aujourd_hui)] if achats else []
-        for op in _candidats(achats, suivis, connus, cours, actions, p):
+        candidats, hors_univers = _candidats(achats, suivis, connus, cours, actions, p)
+        for op in hors_univers:
+            ignorer(op, aujourd_hui, "hors univers ou sans cours")
+        for op in candidats:
             df = cours.get(op.ticker)
             if op.ticker in positions:
                 ignorer(op, aujourd_hui, "titre déjà détenu")

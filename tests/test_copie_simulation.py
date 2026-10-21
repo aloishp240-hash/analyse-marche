@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from inities.mesure import selectionner
 from inities.modele import Operation
 from inities.simulation import frais_courtier, frais_nuls, quantite, simuler
 
@@ -67,7 +68,7 @@ def test_frais_sans_eurusd_ne_leve_pas():
     assert frais_courtier(pd.Series(dtype=float))(1000, date(2030, 3, 4)) == pytest.approx(2.0)
     assert frais_courtier(None)(1000, date(2030, 3, 4)) == pytest.approx(2.0)
     avant = frais_courtier(pd.Series([1.10], index=pd.to_datetime(["2030-03-04"])))
-    assert avant(1000, date(2030, 3, 1)) == pytest.approx(2.0)  # aucun cours connu à cette date
+    assert avant(1000, date(2030, 3, 1)) == pytest.approx(2.10)  # avant le premier point : le premier connu
 
 
 def test_frais_appliques_a_l_entree():
@@ -132,6 +133,15 @@ def test_vente_publiee_sort_a_l_ouverture_suivante():
     t = _simuler(ops, {"AAA": _cours(ouverture)})["trades"][0]
     assert t["sortie"] == JOURS[41].date() and t["prix_sortie"] == 110.0 and t["raison"] == "vente"
     assert t["resultat_usd"] == pytest.approx(30.0)
+
+
+def test_vente_publiee_le_lendemain_ne_fait_pas_sortir_le_jour_meme():
+    ouverture = np.full(len(JOURS), 100.0)
+    ouverture[41] = 110.0  # séance de la publication de la vente : encore détenu
+    ouverture[42:] = 120.0
+    ops = [_dirigeant("AAA", 30), _dirigeant("AAA", 41, sens="vente")]
+    t = _simuler(ops, {"AAA": _cours(ouverture)})["trades"][0]
+    assert t["sortie"] == JOURS[42].date() and t["prix_sortie"] == 120.0 and t["raison"] == "vente"
 
 
 def test_vente_d_une_autre_personne_ou_anterieure_a_l_entree_ne_sort_pas():
@@ -242,6 +252,13 @@ def test_ouverture_manquante_a_l_entree_est_ignoree():
 def test_ticker_sans_cours_ne_leve_pas():
     r = _simuler([_dirigeant("INCONNU", 30), _dirigeant("AAA", 30, cik=2)], {"AAA": _cours()})
     assert [t["ticker"] for t in r["trades"]] == ["AAA"]
+    assert _motifs(r, "INCONNU") == ["hors univers ou sans cours"]
+
+
+def test_achat_copiable_hors_univers_laisse_une_trace():
+    petit = {"AAA": 1e6}  # capitalisation trop faible
+    r = _simuler([_dirigeant("AAA", 30)], {"AAA": _cours()}, actions=petit)
+    assert r["trades"] == [] and _motifs(r, "AAA") == ["hors univers ou sans cours"]
 
 
 def test_cours_qui_disparaissent_pendant_la_detention():
@@ -305,6 +322,17 @@ def test_un_suivi_est_copie_a_partir_de_sa_selection():
 
 
 # --- pas de regard vers l'avenir ---
+
+def test_un_suivi_exige_des_achats_publies_avant_le_1er():
+    # 9 achats avant le 1er juillet, le 10e le 24 juillet : suivi seulement à partir du 1er août
+    ops = [_elu("AAA", s, rang=i) for i, s in enumerate(SESSIONS[:-1])] + [_elu("AAA", 146, rang=9)]
+    cours, qqq = {"AAA": _scenario()[1]["AAA"]}, _cours(400.0)
+    # avec 40 jours de déclarations d'avance, la sélection de juillet retiendrait bien cette personne
+    avance = selectionner(ops, cours, qqq, ACTIONS, date(2030, 7, 1) + timedelta(days=40), P)
+    assert [ligne["retenu"] for ligne in avance] == [True]
+    r = _simuler(ops, cours, debut=DEBUT, fin=FIN, qqq=qqq)
+    assert r["suivis"]["2030-07-01"] == [] and r["suivis"]["2030-08-01"] == [DUPONT]
+    assert r["trades"] == []  # le 10e achat (juillet) n'a pas été copié : personne n'était suivi ce mois-là
 
 def _abimer(df, depuis):
     df = df.copy()
