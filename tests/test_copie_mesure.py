@@ -532,3 +532,22 @@ def test_bat_qqq_compare_les_memes_copies_que_la_part_battue():
     ("LEN, LEN.B", None), ("HEI, HEI.A", None), ("BBXIA/B", None), ("", None), ("TOOLONGX", None), (None, None)])
 def test_nettoyer_ticker(brut, propre):
     assert nettoyer_ticker(brut) == propre
+
+
+def test_charger_demande_le_point_de_classe_avec_un_tiret_mais_garde_le_ticker_d_origine(tmp_path, monkeypatch):
+    faux = FauxYf({"BRK-B": _serie()})  # Yahoo ne connaît que « BRK-B »
+    monkeypatch.setattr(module_cours, "yf", faux)
+    resultat = charger(["BRK.B"], date(2030, 1, 2), date(2030, 2, 20), tmp_path)
+    assert set(resultat) == {"BRK.B"}
+    assert faux.appels_download[0][0] == ["BRK-B"]
+    assert (tmp_path / "cours-BRK.B.pkl").exists()
+    charger(["BRK.B"], date(2030, 1, 2), date(2030, 2, 20), tmp_path)
+    assert len(faux.appels_download) == 1  # relu du cache sous le ticker d'origine
+
+
+def test_actions_en_circulation_demande_le_point_de_classe_avec_un_tiret(tmp_path, monkeypatch):
+    faux = FauxYf({}, {"BRK-B": 2e9})
+    monkeypatch.setattr(module_cours, "yf", faux)
+    assert actions_en_circulation(["BRK.B"], tmp_path) == {"BRK.B": 2e9}
+    assert faux.appels_ticker == ["BRK-B"]
+    assert json.loads((tmp_path / "actions.json").read_text()) == {"BRK.B": 2e9}

@@ -64,6 +64,11 @@ def _extraire(brut, ticker, seul):
     return None
 
 
+def _nom_yahoo(ticker):
+    """Yahoo écrit le point de classe avec un tiret (BRK.B → BRK-B) ; partout ailleurs on garde le ticker d'origine."""
+    return ticker.replace(".", "-")
+
+
 def _est_limite(texte):
     texte = str(texte).lower().replace(" ", "")
     return "ratelimit" in texte or "toomanyrequests" in texte
@@ -76,16 +81,18 @@ def _essai(tickers, debut, fin):
     erreurs = getattr(partage, "_ERRORS", None)
     if isinstance(erreurs, dict):
         erreurs.clear()
+    noms = list(dict.fromkeys(_nom_yahoo(t) for t in tickers))
     try:
-        brut = yf.download(tickers, start=debut.isoformat(), end=(fin + timedelta(days=1)).isoformat(),
+        brut = yf.download(noms, start=debut.isoformat(), end=(fin + timedelta(days=1)).isoformat(),
                            auto_adjust=True, progress=False, threads=FILS_COURS, group_by="ticker")
     except Exception:
         return {}, True
-    trouves = {}
+    chez_yahoo = {}
     if brut is not None and not brut.empty:
-        trouves = {t: df for t in tickers if (df := _nettoyer(_extraire(brut, t, len(tickers) == 1))) is not None}
+        chez_yahoo = {n: df for n in noms if (df := _nettoyer(_extraire(brut, n, len(noms) == 1))) is not None}
+    trouves = {t: chez_yahoo[_nom_yahoo(t)] for t in tickers if _nom_yahoo(t) in chez_yahoo}
     erreurs = erreurs if isinstance(erreurs, dict) else {}
-    limite = any(_est_limite(message) for ticker, message in erreurs.items() if ticker not in trouves)
+    limite = any(_est_limite(message) for nom, message in erreurs.items() if nom not in chez_yahoo)
     return trouves, limite
 
 
@@ -140,7 +147,7 @@ _LIMITE = object()  # valeur renvoyée quand Yahoo limite le débit : à redeman
 
 def _actions(ticker):
     try:
-        valeur = float(yf.Ticker(ticker).fast_info["shares"])
+        valeur = float(yf.Ticker(_nom_yahoo(ticker)).fast_info["shares"])
     except Exception as erreur:
         return _LIMITE if type(erreur).__name__ == "YFRateLimitError" or _est_limite(erreur) else None
     return valeur if math.isfinite(valeur) and valeur > 0 else None
