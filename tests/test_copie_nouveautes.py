@@ -109,6 +109,12 @@ def marche(monkeypatch):
     return m
 
 
+@pytest.fixture(autouse=True)
+def sans_13f(monkeypatch):
+    """Par défaut, aucun 13F n'est lu (le faux site SEC n'en a pas) ; les tests 13F remplacent cette fonction."""
+    monkeypatch.setattr(fonds, "telecharger", lambda *args, **kwargs: ([], 0))
+
+
 def zip_chambre():
     tampon = io.BytesIO()
     with zipfile.ZipFile(tampon, "w") as archive:
@@ -381,7 +387,7 @@ def test_fonds_suivi_seulement(tmp_path, marche, monkeypatch):
            operation("fonds", PERSHING, "NVDA", source="13f:ACC2:CCC", poids_pct=6)]
     appels = []
 
-    def telecharger(client, debut, dossier, p=None):
+    def telecharger(client, debut, dossier, p=None, signaler=None):
         appels.append(debut)
         return ops, 2
 
@@ -409,6 +415,45 @@ def test_13f_en_erreur_n_arrete_pas_form4(tmp_path, marche, monkeypatch):
     achats, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide(), site_form4())
     assert [o.ticker for o in achats] == ["DKS"] and vus["dernier_passage"] == "2026-10-19"
     assert any(n.startswith("13F") for n in notes) and CONTACT not in " ".join(notes)
+
+
+def test_echec_sur_un_fonds_suivi_bloque_le_passage(tmp_path, marche, monkeypatch):
+    ops = [operation("fonds", "fonds:1135730", "MSFT", source="13f:ACC1:AAA", poids_pct=5)]
+
+    def telecharger(client, debut, dossier, p=None, signaler=None):
+        signaler("1135730", "Coatue", "ACC9 : table illisible")
+        signaler("1067983", "Berkshire Hathaway", "dépôts introuvables")
+        return ops, 0
+
+    monkeypatch.setattr(fonds, "telecharger", telecharger)
+    achats, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide())
+    assert achats == [] and vus["vus"] == [] and vus["dernier_passage"] == "2026-10-19"
+    assert "13F, Coatue : ACC9 : table illisible" in notes
+    assert not any("Berkshire" in n for n in notes)
+
+
+def test_echec_sur_un_fonds_avec_position_bloque_aussi(tmp_path, marche, monkeypatch):
+    def telecharger(client, debut, dossier, p=None, signaler=None):
+        signaler("1336528", "Pershing Square", "injoignable")
+        return [], 0
+
+    monkeypatch.setattr(fonds, "telecharger", telecharger)
+    etat = {"positions": [position(PERSHING, "NVDA")], "historique": []}
+    _, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide(), etat=etat)
+    assert "13F, Pershing Square : injoignable" in notes and vus["dernier_passage"] == "2026-10-19"
+
+
+def test_echec_sur_un_fonds_non_suivi_est_sans_effet(tmp_path, marche, monkeypatch):
+    ops = [operation("fonds", "fonds:1135730", "MSFT", source="13f:ACC1:AAA", poids_pct=5)]
+
+    def telecharger(client, debut, dossier, p=None, signaler=None):
+        signaler("1067983", "Berkshire Hathaway", "dépôts introuvables")
+        return ops, 0
+
+    monkeypatch.setattr(fonds, "telecharger", telecharger)
+    achats, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide())
+    assert [o.ticker for o in achats] == ["MSFT"] and vus["vus"] == ["13f:ACC1"]
+    assert vus["dernier_passage"] == "2026-10-20" and not any("Berkshire" in n for n in notes)
 
 
 # --- tickers ---

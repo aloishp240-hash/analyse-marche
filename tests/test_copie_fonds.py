@@ -351,3 +351,12 @@ def test_telecharger_lit_une_table_dont_l_extension_est_en_majuscules(tmp_path):
     ops, _ = telecharger(_client(site, tmp_path), date(2026, 1, 1), tmp_path / "13f")
     assert [(o.ticker, o.sens) for o in ops] == [("MSFT", "achat"), ("HLT", "vente")]
     assert not any(u.lower().endswith("primary_doc.xml") for u in site.urls)  # la page d'en-tête n'est pas la table
+
+
+def test_telecharger_signaler_recoit_cik_nom_et_raison(tmp_path, capsys):
+    appels = []
+    telecharger(_client(_site_pershing(), tmp_path), date(2026, 1, 1), tmp_path / "13f",
+                signaler=lambda cik, nom, raison: appels.append((cik, nom, raison)))
+    assert len(appels) == 12 and ("1067983", "Berkshire Hathaway", "dépôts introuvables") in appels
+    assert all(cik != "1336528" for cik, _, _ in appels)
+    assert "13F ignoré" not in capsys.readouterr().out  # le signalement par défaut n'est plus utilisé

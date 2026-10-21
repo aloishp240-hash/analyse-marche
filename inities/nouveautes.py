@@ -196,10 +196,19 @@ def _lire_form4(lecture, jours, deja, client):
 
 
 def _lire_fonds(lecture, personnes, deja, depuis, client, p, dossier):
-    operations, sans_ticker = fonds.telecharger(client, depuis, dossier, p)
+    en_echec = {}
+
+    def signaler(cik, nom, raison):
+        if f"fonds:{cik}" in personnes:  # un fonds non suivi et sans position ne bloque rien
+            en_echec.setdefault(f"fonds:{cik}", []).append(f"13F, {nom} : {raison}")
+
+    operations, sans_ticker = fonds.telecharger(client, depuis, dossier, p, signaler=signaler)
+    for notes in en_echec.values():
+        lecture.notes.extend(notes)
+        lecture.echec = True
     for op in operations:
         jeton = _jeton(op.source_id)
-        if op.personne_id in personnes and jeton not in deja:
+        if op.personne_id in personnes and op.personne_id not in en_echec and jeton not in deja:
             lecture.lots.setdefault(jeton, []).append(op)
     if sans_ticker:
         lecture.notes.append(f"13F : {sans_ticker} nom(s) de société sans ticker sûr, ignoré(s)")

@@ -222,7 +222,7 @@ def _table_depot(client, cik, accession, dossier):
     raise ErreurFonds(f"table illisible ou absente ({accession})")
 
 
-def _signaler(fonds, raison):
+def _signaler(cik, fonds, raison):
     print(f"13F ignoré : {fonds} ({raison})")
 
 
@@ -230,13 +230,13 @@ def _raison(erreur):
     return str(erreur) if isinstance(erreur, (ErreurFonds, ErreurSec)) else type(erreur).__name__
 
 
-def _lire_fonds(client, cik, nom, mot, debut, dossier, correspondance, p):
+def _lire_fonds(client, cik, nom, mot, debut, dossier, correspondance, p, signaler):
     soumissions = client.json(URL_SOUMISSIONS.format(cik=cik))
     if not isinstance(soumissions, dict):
-        _signaler(nom, "dépôts introuvables")
+        signaler(cik, nom, "dépôts introuvables")
         return [], 0
     if mot not in str(soumissions.get("name", "")).upper():
-        _signaler(nom, f"nom EDGAR inattendu, « {mot} » absent")
+        signaler(cik, nom, f"nom EDGAR inattendu, « {mot} » absent")
         return [], 0
     depots = _depots_13f(soumissions)
     tables = {}
@@ -261,19 +261,21 @@ def _lire_fonds(client, cik, nom, mot, debut, dossier, correspondance, p):
                 table(precedent), table(depot), cik, depot["accession"], depot["publication"], depot["trimestre"],
                 correspondance, p)
         except Exception as erreur:
-            _signaler(nom, f"{depot['accession']} : {_raison(erreur)}")
+            signaler(cik, nom, f"{depot['accession']} : {_raison(erreur)}")
             continue
         operations.extend(ops)
         sans_ticker += manquants
     return operations, sans_ticker
 
 
-def telecharger(client, debut, dossier, p=None):
+def telecharger(client, debut, dossier, p=None, signaler=None):
     """(opérations, noms sans ticker sûr) des 13F-HR publiés depuis debut, pour chaque fonds de FONDS.
 
     Le trimestre précédent sert de point de comparaison même s'il a été publié avant debut. Un fonds dont le nom
-    EDGAR ne contient pas le mot attendu, ou dont un dépôt est illisible, est ignoré et signalé.
+    EDGAR ne contient pas le mot attendu, ou dont un dépôt est illisible, est ignoré et signalé par
+    `signaler(cik, nom, raison)` (par défaut, un affichage).
     """
+    signaler = signaler or _signaler
     p = p or charger_config()["copie"]
     dossier = Path(dossier)
     donnees = client.json(URL_TICKERS)
@@ -281,9 +283,9 @@ def telecharger(client, debut, dossier, p=None):
     operations, sans_ticker = [], 0
     for cik, (nom, mot) in FONDS.items():
         try:
-            ops, manquants = _lire_fonds(client, cik, nom, mot, debut, dossier, correspondance, p)
+            ops, manquants = _lire_fonds(client, cik, nom, mot, debut, dossier, correspondance, p, signaler)
         except Exception as erreur:  # un fonds injoignable ne doit pas arrêter les autres
-            _signaler(nom, _raison(erreur))
+            signaler(cik, nom, _raison(erreur))
             continue
         operations.extend(ops)
         sans_ticker += manquants
