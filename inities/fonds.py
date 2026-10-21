@@ -40,7 +40,7 @@ _SUFFIXES = [["INC"], ["CORP"], ["CO"], ["LTD"], ["PLC"], ["HLDGS"], ["HOLDINGS"
 _CUSIP = re.compile(r"[0-9A-Z]{9}")
 _TICKER = re.compile(r"[A-Z0-9.\-]{1,10}")
 _ACCESSION = re.compile(r"\d{10}-\d{2}-\d{6}")
-_FICHIER_XML = re.compile(r"[A-Za-z0-9_.\-]+\.xml")
+_FICHIER_XML = re.compile(r"[A-Za-z0-9_.\-]+\.xml", re.IGNORECASE)  # EDGAR écrit parfois « .XML »
 _LONGUEUR_NOM = 80
 
 
@@ -207,7 +207,7 @@ def _table_depot(client, cik, accession, dossier):
     elements = ((contenu or {}).get("directory") or {}).get("item") or []
     noms = [e.get("name") for e in elements if isinstance(e, dict) and isinstance(e.get("name"), str)]
     for nom in noms:
-        if not _FICHIER_XML.fullmatch(nom) or nom == "primary_doc.xml":
+        if not _FICHIER_XML.fullmatch(nom) or nom.lower() == "primary_doc.xml":
             continue
         texte = client.texte(base + nom)
         if texte is None:

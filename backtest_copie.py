@@ -10,6 +10,7 @@ Les déclarations déjà lues sont gardées dans donnees/copie/ : un deuxième l
 import argparse
 import json
 import sys
+from dataclasses import replace
 from datetime import date
 
 import pandas as pd
@@ -17,7 +18,7 @@ import pandas as pd
 from commun import RACINE, charger_config
 from inities import chambre, cours, dirigeants, fonds, mesure, rapport, senat, simulation
 from inities.dirigeants import achat_retenu
-from inities.modele import depuis_dict, vers_dict
+from inities.modele import depuis_dict, nettoyer_ticker, vers_dict
 from inities.sec import ClientSec
 
 DONNEES = RACINE / "donnees" / "copie"
@@ -28,7 +29,6 @@ DEBUT_SIMULATION = date(2025, 10, 1)
 DEBUT_DECLARATIONS = date(2024, 1, 1)
 DEBUT_COURS = date(2023, 11, 15)  # de quoi calculer l'univers (20 séances) des premières publications de 2024
 PREMIER_TRIMESTRE = (2024, 1)
-LOT_COURS = 200
 EXEMPLES = 5  # titres cités comme exemples quand des cours ou des nombres d'actions manquent
 
 
@@ -247,10 +247,8 @@ def _actions_du_cache(tickers, dossier):
 def _charger_cours(tickers, debut, fin, dossier, hors_ligne=False):
     if hors_ligne:
         return _cours_du_cache(tickers, debut, fin, dossier)
-    historique = {}
-    for i in range(0, len(tickers), LOT_COURS):
-        historique.update(cours.charger(tickers[i:i + LOT_COURS], debut, fin, dossier))
-    return historique
+    return cours.charger(tickers, debut, fin, dossier,
+                         progres=lambda faits, total: print(f"  cours : lot {faits}/{total}", flush=True))
 
 
 def _manquants(tickers):
@@ -265,16 +263,48 @@ def _phrase_manquants(nom, manquants):
 
 
 def _ligne_titres(lecture):
-    sans_cours, sans_actions = _phrase_manquants("sans cours", lecture["sans_cours"]), _phrase_manquants(
-        "sans nombre d'actions", lecture["sans_actions"])
-    return f"Titres : {sans_cours} ; {sans_actions}"
+    morceaux = [_phrase_manquants("sans cours", lecture["sans_cours"]),
+                _phrase_manquants("sans nombre d'actions", lecture["sans_actions"])]
+    if "ticker_illisible" in lecture:
+        morceaux.append(_phrase_manquants("ticker illisible", lecture["ticker_illisible"]))
+    return "Titres : " + " ; ".join(morceaux)
+
+
+def _a_mesurer(op, debut_simulation, date_choix, p):
+    """L'achat peut-il être mesuré ou copié ? Mêmes critères que mesure.selectionner (élus et fonds, sur la fenêtre la
+    plus large utilisée par la simulation), mesure.bilan_dirigeants et simulation.simuler (dirigeants retenus). Les
+    ventes ne demandent jamais de cours : elles ne servent qu'à fixer une date de sortie."""
+    if op.famille == "dirigeant":
+        return achat_retenu(op, p) and op.date_publication < date_choix
+    debut = (pd.Timestamp(min(debut_simulation, date_choix)) - pd.DateOffset(months=p["fenetre_mois"])).date()
+    return mesure.achat_a_mesurer(op, debut, date_choix, p)
+
+
+def _nettoyer_tickers(ops, debut_simulation, date_choix, p):
+    """(opérations au ticker nettoyé, tickers à demander, tickers illisibles). Seul endroit où un ticker est nettoyé :
+    une opération au ticker illisible est écartée et son ticker brut compté (s'il aurait servi) ; seuls les titres
+    d'achats mesurables sont demandés à Yahoo."""
+    nettes, utiles, illisibles = [], set(), set()
+    for op in ops:
+        ticker = nettoyer_ticker(op.ticker)
+        a_mesurer = _a_mesurer(op, debut_simulation, date_choix, p)
+        if ticker is None:
+            if a_mesurer:
+                illisibles.add(op.ticker)
+            continue
+        nettes.append(op if ticker == op.ticker else replace(op, ticker=ticker))
+        if a_mesurer:
+            utiles.add(ticker)
+    return nettes, sorted(utiles), illisibles
 
 
 def analyser(ops, lecture, p, date_choix, debut_simulation, dossier, hors_ligne=False):
     """(classement, bilan des dirigeants, résultats des deux simulations) ; complète `lecture`. Hors ligne, rien n'est
     demandé à Yahoo : les titres absents du cache sont comptés sans cours."""
     dossier_cours = dossier / "cours"
-    tickers = sorted({op.ticker for op in ops})
+    brutes = ops
+    ops, tickers, illisibles = _nettoyer_tickers(brutes, debut_simulation, date_choix, p)
+    lecture["ticker_illisible"] = _manquants(illisibles)
     print(f"Cours : {len(tickers)} titres, QQQ et EURUSD", flush=True)
     reference = _charger_cours(["QQQ", "EURUSD=X"], DEBUT_COURS, date_choix, dossier_cours, hors_ligne)
     qqq = reference.get("QQQ")
@@ -293,7 +323,7 @@ def analyser(ops, lecture, p, date_choix, debut_simulation, dossier, hors_ligne=
     classement = mesure.selectionner(ops, historique, qqq, actions, date_choix, p)
     bilan_dirigeants = mesure.bilan_dirigeants(ops, historique, qqq, actions, date_choix, p)
     en_ligne = {ligne["personne_id"] for ligne in classement}
-    lecture["personnes_sans_ligne"] = len({op.personne_id for op in ops if op.famille in ("politicien", "fonds")
+    lecture["personnes_sans_ligne"] = len({op.personne_id for op in brutes if op.famille in ("politicien", "fonds")
                                            and op.sens == "achat"} - en_ligne)
     taux = eurusd["Close"] if eurusd is not None else pd.Series(dtype=float)
     resultats = {}

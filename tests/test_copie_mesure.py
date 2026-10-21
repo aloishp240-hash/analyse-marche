@@ -1,3 +1,4 @@
+import json
 from datetime import date, timedelta
 
 import numpy as np
@@ -9,7 +10,7 @@ from inities.cours import actions_en_circulation, charger
 from inities.dirigeants import achat_retenu
 from inities.mesure import (SEANCES_3M, SEANCES_6M, bat_qqq, bilan, bilan_dirigeants, dans_univers, rendement_copie,
                             selectionner)
-from inities.modele import Operation
+from inities.modele import Operation, nettoyer_ticker
 
 P = {"fenetre_mois": 18, "recent_mois": 6, "politicien_achats_min": 10, "politicien_delai_max_j": 30,
      "politicien_montant_min": 15000, "dirigeant_montant_min": 100000, "groupe_dirigeants_jours": 30,
@@ -399,7 +400,104 @@ def test_charger_ignore_erreurs_et_cache_illisible(tmp_path, monkeypatch):
     def casse(*args, **options):
         raise RuntimeError("hors ligne")
     monkeypatch.setattr(faux, "download", casse)
-    assert charger(["NEW"], date(2030, 1, 2), date(2030, 2, 20), tmp_path) == {}
+    pauses = []
+    assert charger(["NEW"], date(2030, 1, 2), date(2030, 2, 20), tmp_path, attendre=pauses.append) == {}
+    assert pauses == [30, 60, 120]
+
+
+class LimiteYf(FauxYf):
+    """Yahoo qui refuse les `refus` premiers appels (exception de limite de débit), puis répond."""
+    def __init__(self, series, refus, actions=None):
+        super().__init__(series, actions)
+        self.refus = refus
+
+    def download(self, tickers, **options):
+        if self.refus > 0:
+            self.refus -= 1
+            self.appels_download.append((list(tickers), options))
+            raise RuntimeError("YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')")
+        return super().download(tickers, **options)
+
+
+def test_charger_attend_puis_reessaie_apres_une_limite_de_debit(tmp_path, monkeypatch):
+    faux = LimiteYf({"AAA": _serie(), "BBB": _serie()}, refus=1)
+    monkeypatch.setattr(module_cours, "yf", faux)
+    pauses = []
+    resultat = charger(["AAA", "BBB"], date(2030, 1, 2), date(2030, 2, 20), tmp_path, attendre=pauses.append)
+    assert set(resultat) == {"AAA", "BBB"}
+    assert pauses == [30]  # une seule attente, puis ça passe
+    assert len(faux.appels_download) == 2
+
+
+def test_charger_echec_permanent_ne_leve_pas_et_renonce_apres_trois_reprises(tmp_path, monkeypatch):
+    faux = LimiteYf({"AAA": _serie()}, refus=100)
+    monkeypatch.setattr(module_cours, "yf", faux)
+    pauses = []
+    assert charger(["AAA", "BBB"], date(2030, 1, 2), date(2030, 2, 20), tmp_path, attendre=pauses.append) == {}
+    assert pauses == [30, 60, 120]
+    assert len(faux.appels_download) == 4  # 1 essai + 3 reprises
+    assert not list(tmp_path.glob("cours-*.pkl"))  # rien en cache pour ce qui a échoué
+
+
+def test_charger_garde_en_cache_les_lots_deja_recus_quand_un_lot_echoue(tmp_path, monkeypatch):
+    faux = FauxYf({"AAA": _serie(), "BBB": _serie(), "CCC": _serie(), "DDD": _serie()})
+    appels = []
+
+    def download(tickers, **options):
+        appels.append(list(tickers))
+        if "CCC" in tickers:
+            raise RuntimeError("Rate limited")
+        return FauxYf.download(faux, tickers, **options)
+    monkeypatch.setattr(faux, "download", download)
+    monkeypatch.setattr(module_cours, "yf", faux)
+    pauses = []
+    resultat = charger(["AAA", "BBB", "CCC", "DDD"], date(2030, 1, 2), date(2030, 2, 20), tmp_path,
+                       attendre=pauses.append, taille_lot=2)
+    assert set(resultat) == {"AAA", "BBB"}
+    assert module_cours.PAUSE_LOTS in pauses  # une pause entre les deux lots
+    appels.clear()
+    assert set(charger(["AAA", "BBB"], date(2030, 1, 2), date(2030, 2, 20), tmp_path, attendre=pauses.append)) \
+        == {"AAA", "BBB"}
+    assert appels == []  # le lot 1 est en cache
+
+
+def test_charger_demande_par_lots_de_la_taille_voulue(tmp_path, monkeypatch):
+    series = {f"T{i:03d}": _serie() for i in range(7)}
+    faux = FauxYf(series)
+    monkeypatch.setattr(module_cours, "yf", faux)
+    charger(list(series), date(2030, 1, 2), date(2030, 2, 20), tmp_path, attendre=lambda s: None, taille_lot=3)
+    assert [len(t) for t, _ in faux.appels_download] == [3, 3, 1]
+
+
+def test_actions_en_circulation_reessaie_apres_limite_et_ecrit_au_fil_de_l_eau(tmp_path, monkeypatch):
+    faux = FauxYf({}, {"AAA": 5e8, "BBB": 1e8})
+    essais = {"AAA": 0}
+    vrai_ticker = faux.Ticker
+
+    def ticker(nom):
+        if nom == "AAA" and essais["AAA"] == 0:
+            essais["AAA"] += 1
+            raise RuntimeError("YFRateLimitError: Too Many Requests")
+        return vrai_ticker(nom)
+    monkeypatch.setattr(faux, "Ticker", ticker)
+    monkeypatch.setattr(module_cours, "yf", faux)
+    pauses = []
+    assert actions_en_circulation(["AAA", "BBB"], tmp_path, attendre=pauses.append, taille_lot=1) \
+        == {"AAA": 5e8, "BBB": 1e8}
+    assert 30 in pauses
+    assert json.loads((tmp_path / "actions.json").read_text()) == {"AAA": 5e8, "BBB": 1e8}
+
+
+def test_actions_en_circulation_echec_permanent_ne_leve_pas(tmp_path, monkeypatch):
+    faux = FauxYf({}, {"AAA": 5e8})
+
+    def ticker(nom):
+        raise RuntimeError("Rate limited")
+    monkeypatch.setattr(faux, "Ticker", ticker)
+    monkeypatch.setattr(module_cours, "yf", faux)
+    pauses = []
+    assert actions_en_circulation(["AAA"], tmp_path, attendre=pauses.append) == {}
+    assert pauses == [30, 60, 120]
 
 
 def test_actions_en_circulation_et_cache(tmp_path, monkeypatch):
@@ -426,3 +524,11 @@ def test_bat_qqq_compare_les_memes_copies_que_la_part_battue():
     assert b["r"] < b["q"]
     assert not bat_qqq(b)
     assert bat_qqq({**b, "r": 1.0, "q": 0.5})
+
+
+@pytest.mark.parametrize("brut, propre", [
+    ("AAPL", "AAPL"), ("  aapl ", "AAPL"), ("NYSE:NYCB", "NYCB"), ("nasdaq: msft", "MSFT"), ("BRK.B", "BRK.B"),
+    ("BRK-B", "BRK-B"), ("NCLH]", None), ("N O G", None), ("[ NONE ]", None), ("N.A.", None),
+    ("LEN, LEN.B", None), ("HEI, HEI.A", None), ("BBXIA/B", None), ("", None), ("TOOLONGX", None), (None, None)])
+def test_nettoyer_ticker(brut, propre):
+    assert nettoyer_ticker(brut) == propre

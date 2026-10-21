@@ -1,4 +1,5 @@
 """Opération déclarée par une personne copiée (élu, dirigeant ou fonds), commune aux trois sources."""
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import date
 
@@ -16,6 +17,19 @@ class Operation:
     montant_max: float
     source_id: str
     details: dict = field(default_factory=dict)
+
+
+_PREFIXE_BOURSE = re.compile(r"(?:NYSE|NASDAQ)\s*:\s*")
+_TICKER_VALIDE = re.compile(r"[A-Z]{1,5}(?:[.-][A-Z]{1,2})?")
+
+
+def nettoyer_ticker(texte):
+    """Ticker Yahoo plausible (majuscules, sans espaces autour ni préfixe NYSE:/NASDAQ:), ou None s'il est illisible :
+    crochets, plusieurs titres, espaces au milieu, « N.A. »... On ne devine jamais parmi plusieurs candidats."""
+    if not isinstance(texte, str):
+        return None
+    texte = _PREFIXE_BOURSE.sub("", texte.strip().upper(), count=1)
+    return texte if _TICKER_VALIDE.fullmatch(texte) else None
 
 
 def delai(op):

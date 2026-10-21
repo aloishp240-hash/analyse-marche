@@ -201,7 +201,7 @@ def _achats_gagnants():
             for i in range(10)]
 
 
-def _cours_faux(tickers, debut, fin, dossier):
+def _cours_faux(tickers, debut, fin, dossier, **_):
     n = len(JOURS)
     resultat = {}
     for ticker in tickers:
@@ -424,7 +424,7 @@ def test_titres_sans_cours_et_sans_actions_sont_comptes(tmp_path, faux, monkeypa
                                 _op("BBB", date(2026, 1, 6), "politicien:chambre:Martin|Paul|NY-01")]
     monkeypatch.setattr(chambre, "telecharger", lambda annees, dossier, session=None: (ops, 90, 10))
     monkeypatch.setattr(module_cours, "charger",
-                        lambda tickers, debut, fin, dossier: {t: df for t, df in _cours_faux(
+                        lambda tickers, debut, fin, dossier, **_: {t: df for t, df in _cours_faux(
                             tickers, debut, fin, dossier).items() if t != "ZZZ"})
     monkeypatch.setattr(module_cours, "actions_en_circulation",
                         lambda tickers, dossier: {t: 1e9 for t in tickers if t != "BBB"})
@@ -435,7 +435,7 @@ def test_titres_sans_cours_et_sans_actions_sont_comptes(tmp_path, faux, monkeypa
     sortie = capsys.readouterr().out
     assert "Titres : 1 sans cours (par exemple ZZZ) ; 1 sans nombre d'actions (par exemple BBB)" in sortie
     assert sortie.rstrip().splitlines().count("Titres : 1 sans cours (par exemple ZZZ) ; 1 sans nombre d'actions "
-                                              "(par exemple BBB).") == 1  # aussi dans le résumé final
+                                              "(par exemple BBB) ; 0 ticker illisible.") == 1  # aussi dans le résumé final
 
 
 def test_jeux_trimestriels_filtres_un_par_un(tmp_path, faux, monkeypatch):
@@ -473,3 +473,52 @@ def test_filtre_ne_garde_que_les_operations_utiles():
     politicien = _op("DDD", date(2026, 1, 5), "politicien:chambre:A|B|NY-01")
     garde = backtest_copie.filtrer([achat_ok, achat_petit, vente_liee, vente_autre, politicien], p)
     assert garde == [achat_ok, vente_liee, politicien]
+
+
+def _espionner_les_demandes(monkeypatch):
+    """Garde les tickers demandés à Yahoo (cours et nombres d'actions), hors QQQ et EURUSD."""
+    demandes = {"cours": set(), "actions": set()}
+
+    def charger(tickers, debut, fin, dossier, **_):
+        demandes["cours"].update(t for t in tickers if t not in ("QQQ", "EURUSD=X"))
+        return _cours_faux(tickers, debut, fin, dossier)
+
+    def actions(tickers, dossier, **_):
+        demandes["actions"].update(tickers)
+        return {t: 1e9 for t in tickers}
+    monkeypatch.setattr(module_cours, "charger", charger)
+    monkeypatch.setattr(module_cours, "actions_en_circulation", actions)
+    return demandes
+
+
+def test_seuls_les_titres_que_la_mesure_peut_utiliser_sont_demandes(tmp_path, faux, monkeypatch):
+    martin = "politicien:chambre:Martin|Paul|NY-01"
+    ops = _achats_gagnants() + [
+        _op("VNT", date(2026, 1, 5), martin, sens="vente"),  # une vente ne demande jamais de cours
+        _op("OLD", date(2023, 12, 5), martin),  # publié avant la fenêtre la plus large
+        _op("SML", date(2026, 1, 5), martin, montant=1000.0),  # sous le montant minimal des élus
+        _op("FUT", DATE_CHOIX, martin),  # publié le jour du choix : exclu
+        _op("DIR", date(2026, 1, 5), "dirigeant:sec:X|Y", famille="dirigeant", code="S", dirigeant=True),  # pas un achat retenu
+        _op("RET", date(2026, 1, 5), "dirigeant:sec:X|Y", famille="dirigeant", code="P", dirigeant=True,
+            montant=P["dirigeant_montant_min"] + 1),
+        _op("FND", date(2026, 1, 5), "fonds:Z", famille="fonds")]
+    monkeypatch.setattr(chambre, "telecharger", lambda annees, dossier, session=None: (ops, 90, 10))
+    demandes = _espionner_les_demandes(monkeypatch)
+    assert _lancer(tmp_path) == 0
+    assert demandes["cours"] == {"AAA", "RET", "FND"}
+    assert demandes["actions"] == {"AAA", "RET", "FND"}
+
+
+def test_tickers_illisibles_jamais_envoyes_a_yahoo_et_comptes(tmp_path, faux, monkeypatch, capsys):
+    martin = "politicien:chambre:Martin|Paul|NY-01"
+    invalides = ["NCLH]", "N O G", "[ NONE ]", "N.A.", "LEN, LEN.B", "HEI, HEI.A", "BBXIA/B"]
+    ops = _achats_gagnants() + [_op(t, date(2026, 1, 5), martin, rang=i) for i, t in enumerate(invalides)] + [
+        _op("NYSE:NYCB", date(2026, 1, 6), martin), _op("nasdaq: msft", date(2026, 1, 7), martin)]
+    monkeypatch.setattr(chambre, "telecharger", lambda annees, dossier, session=None: (ops, 90, 10))
+    demandes = _espionner_les_demandes(monkeypatch)
+    assert _lancer(tmp_path) == 0
+    assert demandes["cours"] == {"AAA", "NYCB", "MSFT"}  # préfixe retiré, majuscules, rien d'illisible
+    donnees = (tmp_path / "rapport_copie.md").read_text().split("## Données")[1]
+    assert "7 titres dont le ticker est illisible" in donnees
+    assert "(par exemple BBXIA/B, HEI, HEI.A, LEN, LEN.B, N O G, N.A.)" in donnees  # 5 exemples, par ordre
+    assert "7 ticker illisible (par exemple " in capsys.readouterr().out

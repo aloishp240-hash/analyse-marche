@@ -2,6 +2,7 @@
 import json
 import math
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
@@ -12,6 +13,14 @@ import yfinance as yf
 SEANCES_3M = 63
 SEANCES_6M = 126
 COLONNES = ["Open", "High", "Low", "Close", "Volume"]
+# Yahoo limite le débit : petits lots, pauses, et nouvelles tentatives après une attente de plus en plus longue.
+LOT_COURS = 50
+FILS_COURS = 2
+PAUSE_LOTS = 2.0
+ATTENTES = (30, 60, 120)  # secondes avant chacune des 3 nouvelles tentatives d'un lot
+LOT_ACTIONS = 20
+FILS_ACTIONS = 2
+PAUSE_ACTIONS = 1.0
 
 
 def _fichier(dossier, ticker):
@@ -55,21 +64,54 @@ def _extraire(brut, ticker, seul):
     return None
 
 
-def _telecharger(tickers, debut, fin):
+def _est_limite(texte):
+    texte = str(texte).lower().replace(" ", "")
+    return "ratelimit" in texte or "toomanyrequests" in texte
+
+
+def _essai(tickers, debut, fin):
+    """(cours trouvés, limite de débit ?) d'un seul appel à yf.download : une exception compte comme une limite, tout
+    comme une erreur de limite de débit que yfinance garde dans yf.shared au lieu de la lever."""
+    partage = getattr(yf, "shared", None)
+    erreurs = getattr(partage, "_ERRORS", None)
+    if isinstance(erreurs, dict):
+        erreurs.clear()
     try:
         brut = yf.download(tickers, start=debut.isoformat(), end=(fin + timedelta(days=1)).isoformat(),
-                           auto_adjust=True, progress=False, threads=True, group_by="ticker")
+                           auto_adjust=True, progress=False, threads=FILS_COURS, group_by="ticker")
     except Exception:
-        return {}
-    if brut is None or brut.empty:
-        return {}
-    return {t: df for t in tickers if (df := _nettoyer(_extraire(brut, t, len(tickers) == 1))) is not None}
+        return {}, True
+    trouves = {}
+    if brut is not None and not brut.empty:
+        trouves = {t: df for t in tickers if (df := _nettoyer(_extraire(brut, t, len(tickers) == 1))) is not None}
+    erreurs = erreurs if isinstance(erreurs, dict) else {}
+    limite = any(_est_limite(message) for ticker, message in erreurs.items() if ticker not in trouves)
+    return trouves, limite
 
 
-def charger(tickers, debut, fin, dossier):
+def _telecharger(tickers, debut, fin, attendre=None):
+    """Cours des tickers qui ont des données. Après une limite de débit, le lot (ou ce qui en manque) est redemandé
+    après 30, 60 puis 120 secondes ; un ticker sans données reste simplement absent, sans exception."""
+    attendre = attendre or time.sleep
+    resultat, restants = {}, list(tickers)
+    for tentative in range(len(ATTENTES) + 1):
+        trouves, limite = _essai(restants, debut, fin)
+        resultat.update(trouves)
+        restants = [t for t in restants if t not in resultat]
+        if not restants or not limite or tentative == len(ATTENTES):
+            break
+        attendre(ATTENTES[tentative])
+    return resultat
+
+
+def charger(tickers, debut, fin, dossier, attendre=None, taille_lot=LOT_COURS, progres=None):
     """Cours ajustés (dividendes et divisions) de chaque ticker entre debut et fin ; absent du dict s'il n'a pas de données.
 
-    Une période déjà en cache n'est pas redemandée ; un ticker sans données n'est pas mis en cache."""
+    Une période déjà en cache n'est pas redemandée ; un ticker sans données n'est pas mis en cache. Les titres
+    manquants sont demandés par lots de `taille_lot`, avec une pause entre les lots, et chaque lot est mis en cache dès
+    qu'il arrive : un arrêt en cours de route ne perd pas les lots déjà reçus. `attendre(secondes)` remplace
+    time.sleep dans les tests ; `progres(lots faits, nombre de lots)` est appelé après chaque lot."""
+    attendre = attendre or time.sleep
     dossier = Path(dossier)
     tickers = list(dict.fromkeys(tickers))
     resultat, manquants = {}, []
@@ -79,27 +121,38 @@ def charger(tickers, debut, fin, dossier):
             resultat[ticker] = entree["cours"]
         else:
             manquants.append(ticker)
-    if manquants:
+    lots = [manquants[i:i + taille_lot] for i in range(0, len(manquants), taille_lot)]
+    for numero, lot in enumerate(lots):
+        if numero:
+            attendre(PAUSE_LOTS)
         dossier.mkdir(parents=True, exist_ok=True)
-        for ticker, df in _telecharger(manquants, debut, fin).items():
+        for ticker, df in _telecharger(lot, debut, fin, attendre).items():
             pd.to_pickle({"debut": debut, "fin": fin, "cours": df}, _fichier(dossier, ticker))
             resultat[ticker] = df
+        if progres is not None:
+            progres(numero + 1, len(lots))
     coupe = {t: resultat[t].loc[pd.Timestamp(debut):pd.Timestamp(fin)] for t in tickers if t in resultat}
     return {t: df for t, df in coupe.items() if not df.empty}
+
+
+_LIMITE = object()  # valeur renvoyée quand Yahoo limite le débit : à redemander plus tard
 
 
 def _actions(ticker):
     try:
         valeur = float(yf.Ticker(ticker).fast_info["shares"])
-    except Exception:
-        return None
+    except Exception as erreur:
+        return _LIMITE if type(erreur).__name__ == "YFRateLimitError" or _est_limite(erreur) else None
     return valeur if math.isfinite(valeur) and valeur > 0 else None
 
 
-def actions_en_circulation(tickers, dossier):
+def actions_en_circulation(tickers, dossier, attendre=None, taille_lot=LOT_ACTIONS):
     """Nombre d'actions actuel de chaque ticker (yfinance) ; absent du dict si la valeur manque.
 
-    C'est une valeur d'aujourd'hui, donc la seule donnée de la mesure qui ne date pas de la publication."""
+    C'est une valeur d'aujourd'hui, donc la seule donnée de la mesure qui ne date pas de la publication. Deux fils
+    seulement, une pause entre les lots, des nouvelles tentatives (30, 60, 120 s) sur limite de débit, et
+    actions.json est réécrit après chaque lot."""
+    attendre = attendre or time.sleep
     fichier = Path(dossier) / "actions.json"
     try:
         connues = json.loads(fichier.read_text())
@@ -109,11 +162,20 @@ def actions_en_circulation(tickers, dossier):
         connues = {}
     tickers = list(dict.fromkeys(tickers))
     manquants = [t for t in tickers if t not in connues]
-    if manquants:
-        with ThreadPoolExecutor(8) as pool:
-            for ticker, valeur in zip(manquants, pool.map(_actions, manquants)):
-                if valeur is not None:
+    for debut_lot in range(0, len(manquants), taille_lot):
+        if debut_lot:
+            attendre(PAUSE_ACTIONS)
+        lot = manquants[debut_lot:debut_lot + taille_lot]
+        for tentative in range(len(ATTENTES) + 1):
+            with ThreadPoolExecutor(FILS_ACTIONS) as pool:
+                valeurs = list(pool.map(_actions, lot))
+            for ticker, valeur in zip(lot, valeurs):
+                if valeur is not None and valeur is not _LIMITE:
                     connues[ticker] = valeur
+            lot = [t for t, v in zip(lot, valeurs) if v is _LIMITE]
+            if not lot or tentative == len(ATTENTES):
+                break
+            attendre(ATTENTES[tentative])
         Path(dossier).mkdir(parents=True, exist_ok=True)
         fichier.write_text(json.dumps(connues, indent=1))
     return {t: connues[t] for t in tickers if t in connues}

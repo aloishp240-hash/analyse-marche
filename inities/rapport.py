@@ -162,7 +162,9 @@ def _donnees(lecture):
     if "sans_ticker" in lecture:
         lignes.append(f"- {_pluriel(lecture['sans_ticker'], 'nom de fonds', 'noms de fonds')} sans ticker sûr : "
                       "ignorés.")
-    for cle, texte in (("sans_cours", "sans cours (Yahoo n'en a pas, ou ils ne sont pas gardés) : leurs achats ne sont "
+    for cle, texte in (("ticker_illisible", "dont le ticker est illisible (crochets, plusieurs titres, espaces...) : "
+                                            "jamais envoyés à Yahoo, leurs achats ne sont ni mesurés ni copiés"),
+                       ("sans_cours", "sans cours (Yahoo n'en a pas, ou ils ne sont pas gardés) : leurs achats ne sont "
                                       "ni mesurés ni copiés"),
                        ("sans_actions", "sans nombre d'actions : leurs achats sortent de l'univers")):
         m = lecture.get(cle)

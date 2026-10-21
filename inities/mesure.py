@@ -132,6 +132,13 @@ def _motif(famille, b, limite_recent, date_choix, p):
     return "retenu"
 
 
+def achat_a_mesurer(op, debut, date_choix, p):
+    """Achat d'élu ou de fonds que `selectionner` peut mesurer, avant le test d'univers : publié dans [debut,
+    date_choix) et, pour un élu, d'au moins politicien_montant_min. Seuls ces achats ont besoin d'un cours."""
+    return (op.famille in ("politicien", "fonds") and op.sens == "achat" and debut <= op.date_publication < date_choix
+            and (op.famille != "politicien" or op.montant_min >= p["politicien_montant_min"]))
+
+
 def selectionner(ops, cours, qqq, actions, date_choix, p):
     """Une ligne par politicien et par fonds, avec les critères appliqués à la date de choix.
 
@@ -141,10 +148,7 @@ def selectionner(ops, cours, qqq, actions, date_choix, p):
     limite_recent = (pd.Timestamp(date_choix) - pd.DateOffset(months=p["recent_mois"])).date()
     personnes = {}
     for op in ops:
-        if (op.famille not in ("politicien", "fonds") or op.sens != "achat"
-                or not debut <= op.date_publication < date_choix
-                or (op.famille == "politicien" and op.montant_min < p["politicien_montant_min"])
-                or not dans_univers(op, cours, actions, p)):
+        if not achat_a_mesurer(op, debut, date_choix, p) or not dans_univers(op, cours, actions, p):
             continue
         personnes.setdefault(op.personne_id, []).append(op)
     lignes = []

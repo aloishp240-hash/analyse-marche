@@ -339,3 +339,15 @@ def test_telecharger_compte_les_noms_sans_ticker(tmp_path):
     site = _site_pershing(**{"https://www.sec.gov/files/company_tickers.json": Reponse(octets=json.dumps(corr).encode())})
     ops, sans_ticker = telecharger(_client(site, tmp_path), date(2026, 1, 1), tmp_path / "13f")
     assert [o.ticker for o in ops] == ["HLT"] and sans_ticker == 1
+
+
+def test_telecharger_lit_une_table_dont_l_extension_est_en_majuscules(tmp_path):
+    # Viking (2026T1) : la table s'appelle « MSFS13F033126.XML » dans le dossier du dépôt
+    apres = (DONNEES / "13f-apres.xml").read_bytes()
+    site = _site_pershing(**{
+        _dossier("1336528", ACC_APRES) + "index.json": Reponse(
+            octets=json.dumps(_index("PRIMARY_DOC.XML", "INFOTABLE.XML")).encode()),
+        _dossier("1336528", ACC_APRES) + "INFOTABLE.XML": Reponse(octets=apres)})
+    ops, _ = telecharger(_client(site, tmp_path), date(2026, 1, 1), tmp_path / "13f")
+    assert [(o.ticker, o.sens) for o in ops] == [("MSFT", "achat"), ("HLT", "vente")]
+    assert not any(u.lower().endswith("primary_doc.xml") for u in site.urls)  # la page d'en-tête n'est pas la table
