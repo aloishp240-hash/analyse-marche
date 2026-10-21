@@ -105,6 +105,16 @@ class Client:
             "client_order_id": id_client,
         })
 
+    def passer_stop(self, ticker, quantite, stop, id_client, validite="gtc"):
+        """Ordre stop de vente seul, pour reposer la protection d'une position dont le stop a été annulé."""
+        if isinstance(quantite, bool) or not isinstance(quantite, int) or quantite < 1:
+            raise ErreurAlpaca("un ordre stop demande un nombre entier d'actions (au moins 1)")
+        _verifier_stop(stop)
+        return self._appel("POST", "/v2/orders", json={
+            "symbol": ticker, "qty": str(quantite), "side": "sell", "type": "stop",
+            "time_in_force": validite, "stop_price": f"{stop:.2f}", "client_order_id": id_client,
+        })
+
     def modifier_stop(self, identifiant, stop):
         """Déplace le prix d'un ordre stop déjà posé."""
         _verifier_stop(stop)

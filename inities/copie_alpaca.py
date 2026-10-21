@@ -2,10 +2,11 @@
 
 Le code seul décide : Claude ne fixe ni prix ni quantité, ne touche à aucun stop et ne décide d'aucune vente.
 L'état (`copie/positions.json`) ne contient que des identifiants et des dates ; les messages ne citent que le ticker.
-Au moindre écart avec le compte, ou quand Alpaca refuse un ordre, `copie/suspension.json` est écrit : plus aucun
+Les fonctions modifient l'état qu'on leur passe, au fil des ordres, puis le renvoient : si une exception les
+interrompt, `copier` enregistre quand même ce qui a déjà été fait. Au moindre écart avec le compte, ou quand Alpaca refuse un ordre, `copie/suspension.json` est écrit : plus aucun
 ordre n'est passé tant que l'utilisateur ne l'a pas supprimé (le rapprochement continue).
 """
-import copy
+import hashlib
 import json
 import math
 from datetime import date
@@ -23,7 +24,7 @@ POSITIONS = DOSSIER / "positions.json"
 
 VALIDITE = "gtc"  # validité de l'ordre oto : un seul endroit à changer si Alpaca la refuse
 STOP_PCT_DEFAUT = 15
-LONGUEUR_ID_CLIENT = 48
+LONGUEUR_ID_CLIENT_MAX = 128  # limite d'Alpaca
 _ECHECS = ("canceled", "expired", "rejected")
 
 
@@ -54,11 +55,20 @@ def _suspendre(motif, jour):
 
 
 def _jambe_stop(ordre):
-    return next((jambe for jambe in ordre.get("legs") or [] if jambe.get("type") == "stop"), None)
+    """Jambe stop de l'ordre : la jambe en vigueur (ni remplacée ni annulée), sinon la dernière jambe stop."""
+    jambes = [jambe for jambe in ordre.get("legs") or [] if jambe.get("type") == "stop"]
+    en_vigueur = [jambe for jambe in jambes if jambe.get("status") not in ("replaced", "canceled")]
+    if en_vigueur:
+        return en_vigueur[0]
+    return jambes[-1] if jambes else None
 
 
-def _id_client(source_id):
-    return ("copie-" + source_id.replace(":", "-"))[:LONGUEUR_ID_CLIENT]
+def _id_client(source_id, prefixe="copie-"):
+    """Identifiant d'ordre lisible, ou condensé (SHA-256) s'il dépasse la limite d'Alpaca."""
+    texte = prefixe + source_id.replace(":", "-")
+    if len(texte) <= LONGUEUR_ID_CLIENT_MAX:
+        return texte
+    return prefixe + hashlib.sha256(source_id.encode()).hexdigest()[:40]
 
 
 def _valeur_compte(client):
@@ -76,10 +86,10 @@ def _virgule(nombre):
 
 def rapprocher(etat, client, p=None, aujourd_hui=None):
     """Compare l'état au compte : stop exécuté (sortie), recalage unique du stop à (100 - stop_pct) % du prix payé,
-    écart (suspension). Renvoie (nouvel état, messages)."""
-    etat, jour = copy.deepcopy(etat), aujourd_hui or date.today()
+    écart (suspension). Renvoie (état, messages)."""
+    jour = aujourd_hui or date.today()
     coefficient = 1 - ((p or {}).get("stop_pct", STOP_PCT_DEFAUT)) / 100
-    messages, ecarts, restantes = [], [], []
+    messages, ecarts = [], []
     chez_alpaca = {pos["symbol"] for pos in client.positions()}
 
     en_vente = set()  # ventes demandées et pas encore exécutées : la position peut encore apparaître chez Alpaca
@@ -93,7 +103,7 @@ def rapprocher(etat, client, p=None, aujourd_hui=None):
             else:
                 en_vente.add(ligne["ticker"])
 
-    for position in etat["positions"]:
+    for position in list(etat["positions"]):
         ticker = position["ticker"]
         ordre = client.ordre(position["id_ordre"])
         jambe = _jambe_stop(ordre)
@@ -103,10 +113,11 @@ def rapprocher(etat, client, p=None, aujourd_hui=None):
             etat["historique"].append({
                 "ticker": ticker, "personne_id": position["personne_id"], "source_id": position["source_id"],
                 "date_entree": position["date_entree"], "date_sortie": jour.isoformat(), "raison": "stop"})
+            etat["positions"].remove(position)
             messages.append(f"Stop exécuté sur {ticker} : position fermée.")
-            continue
         else:
-            position["id_stop"] = jambe.get("id") or position["id_stop"]
+            if jambe.get("status") != "replaced":
+                position["id_stop"] = jambe.get("id") or position["id_stop"]
             statut = ordre.get("status")
             if statut in _ECHECS:
                 ecarts.append(f"{ticker} : l'ordre d'achat est {statut}")
@@ -117,13 +128,16 @@ def rapprocher(etat, client, p=None, aujourd_hui=None):
                     ecarts.append(f"{ticker} : position absente du compte sans stop exécuté")
                 elif not position["stop_recale"]:
                     stop = float(ordre["filled_avg_price"]) * coefficient
-                    client.modifier_stop(position["id_stop"], stop)
-                    position["stop_recale"] = True
-                    messages.append(f"Achat de {ticker} exécuté : stop recalé à {_virgule(stop)} $.")
-        restantes.append(position)
-    etat["positions"] = restantes
+                    try:
+                        reponse = client.modifier_stop(position["id_stop"], stop)
+                    except ErreurAlpaca as erreur:
+                        ecarts.append(f"{ticker} : stop non recalé ({str(erreur)[:200]})")
+                    else:
+                        position["id_stop"] = (reponse or {}).get("id") or position["id_stop"]
+                        position["stop"], position["stop_recale"] = stop, True
+                        messages.append(f"Achat de {ticker} exécuté : stop recalé à {_virgule(stop)} $.")
 
-    connus = {pos["ticker"] for pos in restantes} | en_vente
+    connus = {pos["ticker"] for pos in etat["positions"]} | en_vente
     for ticker in sorted(chez_alpaca - connus):
         ecarts.append(f"{ticker} : position du compte absente de l'état")
     if ecarts:
@@ -143,38 +157,63 @@ def _raison_sortie(position, ventes, aujourd_hui):
 
 def sorties(etat, ventes, aujourd_hui, client):
     """Ferme les positions dont la personne copiée a vendu le titre, ou arrivées à sortie_prevue : le stop est
-    annulé, puis la position est vendue au marché. Renvoie (nouvel état, messages)."""
-    etat = copy.deepcopy(etat)
+    annulé, puis la position est vendue au marché. Si l'achat n'est pas encore exécuté, on annule l'ordre parent
+    (et sa jambe) ; on ne vend que ce qui a déjà été acheté. Si la vente est refusée alors que le stop est annulé,
+    on tente une fois de reposer le stop, puis on suspend. Renvoie (état, messages)."""
     messages = []
     for position in list(etat["positions"]):
         raison = _raison_sortie(position, ventes, aujourd_hui)
         if raison is None:
             continue
-        ticker, stop_annule = position["ticker"], False
+        ticker, stop_annule, execute = position["ticker"], False, True
         try:
-            if position.get("id_stop"):
-                client.annuler(position["id_stop"])
-                stop_annule = True
-            ordre = client.fermer_position(ticker)
+            execute = client.ordre(position["id_ordre"]).get("status") == "filled"
+            if execute:
+                if position.get("id_stop"):
+                    client.annuler(position["id_stop"])
+                    stop_annule = True
+            else:
+                client.annuler(position["id_ordre"])
+            ordre = None
+            if execute or ticker in {pos["symbol"] for pos in client.positions()}:
+                ordre = client.fermer_position(ticker)
         except ErreurAlpaca as erreur:
-            suite = " ; son stop est annulé, la position n'est plus protégée" if stop_annule else ""
-            messages += _suspendre(f"sortie de {ticker} impossible ({erreur}){suite}", aujourd_hui)
+            if stop_annule:
+                suite = (" ; son stop a été annulé puis reposé" if _reposer_stop(position, client)
+                         else " ; son stop a été annulé et n'a pas pu être reposé (non reposé), la position n'est "
+                              "plus protégée")
+            else:
+                suite = ""
+            messages += _suspendre(f"sortie de {ticker} impossible ({str(erreur)[:200]}){suite}", aujourd_hui)
             break
         etat["positions"].remove(position)
         etat["historique"].append({
             "ticker": ticker, "personne_id": position["personne_id"], "source_id": position["source_id"],
             "date_entree": position["date_entree"], "date_sortie": aujourd_hui.isoformat(), "raison": raison,
-            "id_vente": ordre.get("id"), "vente_confirmee": False})
+            "id_vente": (ordre or {}).get("id"), "vente_confirmee": ordre is None})
         messages.append(f"Sortie de {ticker} : " + ("vente publiée par la personne copiée."
                                                     if raison == "vente" else "6 mois de détention atteints."))
     return etat, messages
 
 
+def _reposer_stop(position, client):
+    """Une seule tentative de reposer le stop annulé, au même prix et sur la même quantité. Vrai si c'est fait."""
+    if not (position.get("stop") and position.get("quantite")):
+        return False
+    try:
+        reponse = client.passer_stop(position["ticker"], position["quantite"], position["stop"],
+                                     _id_client(position["source_id"], prefixe="copie-restop-copie-"), VALIDITE)
+    except ErreurAlpaca:
+        return False
+    position["id_stop"] = (reponse or {}).get("id") or position["id_stop"]
+    return True
+
+
 def entrees(etat, achats, derniers_cours, client, p, aujourd_hui=None):
     """Passe un ordre `oto` (achat au marché + stop à stop_pct sous le dernier cours) pour chaque achat copiable,
-    dans l'ordre de priorité de la simulation. Renvoie (nouvel état, messages, achats seulement signalés avec leur
+    dans l'ordre de priorité de la simulation. Renvoie (état, messages, achats seulement signalés avec leur
     motif). Un ErreurAlpaca sur un ordre suspend la copie : les achats restants sont signalés, pas passés."""
-    etat, jour = copy.deepcopy(etat), aujourd_hui or date.today()
+    jour = aujourd_hui or date.today()
     messages, signales = [], []
     deja = {pos["source_id"] for pos in etat["positions"] + etat["historique"]}
     nouveaux = [op for op in achats if op.sens == "achat" and op.source_id not in deja]
@@ -182,6 +221,7 @@ def entrees(etat, achats, derniers_cours, client, p, aujourd_hui=None):
         return etat, messages, signales
     valeur = _valeur_compte(client)
     detenus = {pos["ticker"] for pos in etat["positions"]}
+    sortis = {ligne["ticker"] for ligne in etat["historique"] if ligne.get("date_sortie") == jour.isoformat()}
     suspendue = False
     for op in trier_par_priorite(nouveaux, groupes(achats, p)):
         cours = derniers_cours.get(op.ticker)
@@ -189,6 +229,8 @@ def entrees(etat, achats, derniers_cours, client, p, aujourd_hui=None):
             signales.append((op, "copie suspendue"))
         elif op.ticker in detenus:
             signales.append((op, "titre déjà détenu"))
+        elif op.ticker in sortis:
+            signales.append((op, "titre sorti aujourd'hui"))
         elif len(etat["positions"]) >= p["positions_max"]:
             signales.append((op, f"plafond de {p['positions_max']} positions atteint"))
         elif not isinstance(cours, (int, float)) or not math.isfinite(cours) or cours <= 0:
@@ -207,8 +249,8 @@ def entrees(etat, achats, derniers_cours, client, p, aujourd_hui=None):
             jambe = _jambe_stop(ordre)
             etat["positions"].append({
                 "ticker": op.ticker, "personne_id": op.personne_id, "source_id": op.source_id,
-                "id_ordre": ordre["id"], "id_stop": jambe.get("id") if jambe else None,
-                "date_entree": jour.isoformat(),
+                "id_ordre": ordre.get("id"), "id_stop": jambe.get("id") if jambe else None,
+                "date_entree": jour.isoformat(), "stop": stop, "quantite": nombre,
                 "sortie_prevue": (pd.Timestamp(jour) + pd.DateOffset(months=p["duree_max_mois"])).date().isoformat(),
                 "stop_recale": False})
             detenus.add(op.ticker)
@@ -218,14 +260,25 @@ def entrees(etat, achats, derniers_cours, client, p, aujourd_hui=None):
 
 def copier(achats, ventes, derniers_cours, client, p, aujourd_hui):
     """Passage du matin : rapprochement, sorties, puis entrées. Dès qu'une suspension existe, plus rien d'autre n'est
-    fait. Enregistre l'état. Renvoie (messages, achats seulement signalés avec leur motif)."""
-    etat, messages = rapprocher(charger_etat(), client, p, aujourd_hui)
-    signales = []
-    if not suspendu():
-        etat, plus = sorties(etat, ventes, aujourd_hui, client)
+    fait. L'état est enregistré quoi qu'il arrive, ordres déjà passés compris. Une exception autre qu'`ErreurAlpaca`
+    suspend la copie (le type d'erreur seul est noté), puis est relevée. Renvoie (messages, achats seulement
+    signalés avec leur motif)."""
+    etat = charger_etat()
+    messages, signales = [], []
+    try:
+        etat, plus = rapprocher(etat, client, p, aujourd_hui)
         messages += plus
-    if not suspendu():
-        etat, plus, signales = entrees(etat, achats, derniers_cours, client, p, aujourd_hui)
-        messages += plus
-    enregistrer_etat(etat)
+        if not suspendu():
+            etat, plus = sorties(etat, ventes, aujourd_hui, client)
+            messages += plus
+        if not suspendu():
+            etat, plus, signales = entrees(etat, achats, derniers_cours, client, p, aujourd_hui)
+            messages += plus
+    except ErreurAlpaca:
+        raise
+    except Exception as erreur:
+        _suspendre(f"erreur inattendue ({type(erreur).__name__}) pendant la copie", aujourd_hui)
+        raise
+    finally:
+        enregistrer_etat(etat)
     return messages, signales

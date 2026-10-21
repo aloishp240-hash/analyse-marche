@@ -145,6 +145,33 @@ def test_oto_refuse_un_stop_invalide(stop):
     assert c.session.appels == []
 
 
+def test_passer_stop_bien_forme():
+    c = client(Reponse(contenu={"id": "stop-9"}))
+    assert c.passer_stop("NVDA", 3, stop=85.456, id_client="cp-3")["id"] == "stop-9"
+    appel = c.session.appels[0]
+    assert (appel["methode"], appel["url"]) == ("POST", URL_PAPER + "/v2/orders")
+    assert appel["json"] == {
+        "symbol": "NVDA", "qty": "3", "side": "sell", "type": "stop", "time_in_force": "gtc",
+        "stop_price": "85.46", "client_order_id": "cp-3",
+    }
+
+
+@pytest.mark.parametrize("quantite", [0, -1, 1.5, True, "3", None])
+def test_passer_stop_refuse_une_quantite_invalide(quantite):
+    c = client()
+    with pytest.raises(ErreurAlpaca, match="entier"):
+        c.passer_stop("NVDA", quantite, stop=85, id_client="x")
+    assert c.session.appels == []
+
+
+@pytest.mark.parametrize("stop", [0, -5, float("nan"), float("inf"), True, "85", None])
+def test_passer_stop_refuse_un_stop_invalide(stop):
+    c = client()
+    with pytest.raises(ErreurAlpaca, match="stop"):
+        c.passer_stop("NVDA", 1, stop=stop, id_client="x")
+    assert c.session.appels == []
+
+
 def test_modifier_stop():
     c = client(Reponse(contenu={"id": "abc", "stop_price": "85.12"}))
     assert c.modifier_stop("abc", 85.123)["id"] == "abc"
