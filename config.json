@@ -65,5 +65,28 @@
     "filtre_mm": 200,
     "frais_fixe_eur": 1,
     "frais_pct": 0.1
+  },
+  "copie": {
+    "senat_accepte": false,
+    "alpaca_actif": false,
+    "capital_initial": 3000,
+    "part_par_achat_pct": 10,
+    "part_max_une_action_pct": 15,
+    "positions_max": 10,
+    "stop_pct": 15,
+    "duree_max_mois": 6,
+    "fenetre_mois": 18,
+    "recent_mois": 6,
+    "politicien_achats_min": 10,
+    "politicien_delai_max_j": 30,
+    "politicien_montant_min": 15000,
+    "dirigeant_montant_min": 100000,
+    "groupe_dirigeants_jours": 30,
+    "fonds_poids_min_pct": 3,
+    "fonds_positions_min": 3,
+    "capitalisation_min": 2000000000,
+    "volume_dollars_min": 10000000,
+    "descriptions_max": 5,
+    "heure_paris": "08:00"
   }
 }
