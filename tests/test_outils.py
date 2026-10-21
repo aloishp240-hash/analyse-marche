@@ -10,6 +10,17 @@ from outils import signal as outil_signal
 JOUR = date(2026, 10, 20)
 
 
+def achat(debut):
+    """Justification d'achat valide : quatre rubriques et au moins 200 caractères."""
+    return (f"Technique : {debut} Le cours revient vers sa moyenne de 20 jours dans une tendance haussière. "
+            "Actualités : rien d'inquiétant cette semaine. Contexte : le Nasdaq reste au-dessus de sa moyenne de "
+            "200 jours. Risque : les résultats sont dans plus de quatre semaines.")
+
+
+def vente(debut):
+    return f"{debut} La raison de l'achat ne tient plus, mieux vaut sortir."
+
+
 def candidat(ticker, industrie="Semiconductors"):
     return {"ticker": ticker, "configuration": "A", "cloture": 100.0, "atr": 2.0, "rsi": 40.0,
             "force_relative": 5.0, "entree": 99.5, "stop": 96.5, "objectif": 105.5, "industrie": industrie}
@@ -20,7 +31,8 @@ def agent(tmp_path, monkeypatch):
     """Fichiers de l'agent dans un dossier temporaire, Telegram et taux de change simulés."""
     envois = []
     candidats, etat = tmp_path / "candidats-du-jour.json", tmp_path / "positions.json"
-    candidats.write_text(json.dumps({"jour": JOUR.isoformat(), "candidats": [candidat("AAA")]}))
+    candidats.write_text(json.dumps({"jour": JOUR.isoformat(), "entrees_bloquees": [],
+                                      "candidats": [candidat("AAA")]}))
     for module in (outil_signal, info, fermer):
         monkeypatch.setattr(module, "ETAT", etat)
         monkeypatch.setattr(module, "EN_ATTENTE", tmp_path / "en-attente.json")
@@ -44,7 +56,7 @@ def ecrire_etat(chemin, suivis):
 
 def test_signal_refuse_hors_candidats(agent, capsys):
     etat, envois = agent
-    outil_signal.main(["ZZZ", "belle tendance"])
+    outil_signal.main(["ZZZ", achat("Belle tendance.")])
     assert "refusé" in capsys.readouterr().out
     assert en_attente(etat)["messages"] == [] and not etat.exists()
 
@@ -53,7 +65,7 @@ def test_signal_refuse_au_plafond(agent, capsys):
     etat, envois = agent
     ecrire_etat(etat, ["B1", "B2", "B3", "B4", "B5"])
     avant = etat.read_text()
-    outil_signal.main(["AAA", "belle tendance"])
+    outil_signal.main(["AAA", achat("Belle tendance.")])
     assert "refusé" in capsys.readouterr().out
     assert en_attente(etat)["messages"] == [] and etat.read_text() == avant
 
@@ -61,20 +73,20 @@ def test_signal_refuse_au_plafond(agent, capsys):
 def test_signal_mis_en_attente(agent, capsys):
     # Rien n'est envoyé ni enregistré pendant la session : agent.py applique les signaux si elle réussit
     etat, envois = agent
-    outil_signal.main(["AAA", "Tendance intacte."])
+    outil_signal.main(["AAA", achat("Tendance intacte.")])
     assert "signal enregistré" in capsys.readouterr().out
     assert envois == [] and not etat.exists()
     attendu = en_attente(etat)
     ordre = attendu["etat"]["ordres"][0]
     assert ordre["ticker"] == "AAA" and ordre["entree"] == 99.5 and ordre["date_signal"] == "2026-10-20"
     assert len(attendu["messages"]) == 1 and "Tendance intacte." in attendu["messages"][0]
-    outil_signal.main(["AAA", "Encore."])                  # le second signal voit le premier
+    outil_signal.main(["AAA", achat("Encore.")])                  # le second signal voit le premier
     assert "refusé" in capsys.readouterr().out and len(en_attente(etat)["etat"]["ordres"]) == 1
 
 
 def test_signal_refuse_candidats_perimes(agent, capsys, monkeypatch):
     monkeypatch.setattr(outil_signal, "aujourd_hui", lambda: date(2026, 10, 21))
-    outil_signal.main(["AAA", "belle tendance"])
+    outil_signal.main(["AAA", achat("Belle tendance.")])
     assert "refusé" in capsys.readouterr().out and agent[1] == []
 
 
@@ -147,10 +159,12 @@ def test_polymarket_filtre_et_trie(monkeypatch, capsys):
 def test_fermer_annule_un_ordre(agent, capsys):
     etat, envois = agent
     ecrire_etat(etat, ["AAA", "BBB"])
-    fermer.main(["AAA", "Enquête annoncée."])
+    fermer.main(["AAA", vente("Enquête annoncée.")])
     assert "annulé" in capsys.readouterr().out and not envois
     attendu = en_attente(etat)
     assert [o["ticker"] for o in attendu["etat"]["ordres"]] == ["BBB"]
+    clos = attendu["etat"]["ordres_clos"]                     # gardé avec son historique, pas effacé
+    assert [o["ticker"] for o in clos] == ["AAA"] and clos[0]["etat"] == "annule"
     assert attendu["messages"][0].startswith("❎ ORDRE ANNULÉ — AAA") and "Enquête annoncée." in attendu["messages"][0]
 
 
@@ -160,20 +174,74 @@ def test_fermer_vend_une_position_puis_libere_la_place(agent, capsys):
     donnees = json.loads(etat.read_text())
     donnees["positions"] = [{**donnees["ordres"].pop(), "prix_entree": 99.5, "date_entree": "2026-10-19"}]
     etat.write_text(json.dumps(donnees))
-    outil_signal.main(["AAA", "Meilleur dossier."])
+    outil_signal.main(["AAA", achat("Meilleur dossier.")])
     assert "refusé" in capsys.readouterr().out                                       # 5 titres suivis
-    fermer.main(["B5", "Thèse cassée."])
+    fermer.main(["B5", vente("Thèse cassée.")])
     assert "vente de B5 enregistrée" in capsys.readouterr().out
     position = en_attente(etat)["etat"]["positions"][0]
-    assert position["sortie_demandee"] == JOUR.isoformat() and position["justification_sortie"] == "Thèse cassée."
-    fermer.main(["B5", "Encore."])
+    assert position["sortie_demandee"] == JOUR.isoformat() and position["justification_sortie"] == vente("Thèse cassée.")
+    fermer.main(["B5", vente("Encore.")])
     assert "déjà demandée" in capsys.readouterr().out
-    outil_signal.main(["AAA", "Meilleur dossier."])
+    outil_signal.main(["AAA", achat("Meilleur dossier.")])
     assert "signal enregistré" in capsys.readouterr().out
 
 
 def test_fermer_refuse_ticker_non_suivi(agent, capsys):
     etat, envois = agent
     ecrire_etat(etat, ["AAA"])
-    fermer.main(["ZZZ", "raison"])
+    fermer.main(["ZZZ", vente("Raison.")])
     assert "refusé" in capsys.readouterr().out and en_attente(etat)["messages"] == []
+
+
+def test_signal_refuse_si_entrees_bloquees(agent, capsys, tmp_path):
+    etat, envois = agent
+    candidats = tmp_path / "candidats-du-jour.json"
+    for blocage in ({"entrees_bloquees": ["QQQ : cours du jour absent"]}, {"entrees_bloquees": None}, {}):
+        contenu = {"jour": JOUR.isoformat(), "candidats": [candidat("AAA")], **blocage}
+        if blocage == {}:
+            contenu.pop("entrees_bloquees", None)
+        candidats.write_text(json.dumps(contenu))
+        outil_signal.main(["AAA", achat("Belle tendance.")])
+        assert "refusé : nouvelles entrées bloquées" in capsys.readouterr().out
+    assert en_attente(etat)["messages"] == [] and len(en_attente(etat)["refus"]) == 3
+
+
+def test_signal_refuse_si_suspension(agent, capsys):
+    etat, envois = agent
+    ecrire_etat(etat, [])
+    donnees = json.loads(etat.read_text())
+    donnees["suspension"] = {"depuis": "2026-10-19", "motif": "capital en recul"}
+    etat.write_text(json.dumps(donnees))
+    outil_signal.main(["AAA", achat("Belle tendance.")])
+    assert "suspendues" in capsys.readouterr().out and en_attente(etat)["messages"] == []
+
+
+@pytest.mark.parametrize("ticker, texte, motif", [
+    ("AAA; rm -rf", achat("x"), "ticker invalide"),
+    ("AAA", "Technique : trop court.", "trop courte"),
+    ("AAA", achat("x").replace("Risque :", "Danger :"), "rubrique(s) manquante(s) : Risque"),
+])
+def test_signal_refuse_textes_invalides(agent, capsys, ticker, texte, motif):
+    etat, envois = agent
+    outil_signal.main([ticker, texte])
+    assert motif in capsys.readouterr().out and en_attente(etat)["messages"] == []
+
+
+def test_signal_nettoie_liens_et_caracteres_caches(agent, capsys):
+    etat, envois = agent
+    outil_signal.main(["AAA", achat("Voir https://piege.example/x\u202e ici\x07.")])
+    assert "signal enregistré" in capsys.readouterr().out
+    justification = en_attente(etat)["etat"]["ordres"][0]["justification"]
+    assert "piege" not in justification and "[lien retiré]" in justification
+    assert "\u202e" not in justification and "\x07" not in justification
+
+
+def test_fermer_limite_le_nombre_de_fermetures(agent, capsys):
+    etat, envois = agent
+    ecrire_etat(etat, ["B1", "B2", "B3"])
+    fermer.main(["B1", vente("Un.")])
+    fermer.main(["B2", vente("Deux.")])
+    capsys.readouterr()
+    fermer.main(["B3", vente("Trois.")])
+    assert "maximum" in capsys.readouterr().out
+    assert [o["ticker"] for o in en_attente(etat)["etat"]["ordres"]] == ["B3"]

@@ -47,9 +47,11 @@ def test_session_reussie(tmp_path, monkeypatch):
 def fichiers(tmp_path, monkeypatch):
     envois = []
     for nom, chemin in (("SESSIONS", tmp_path), ("ETAT", tmp_path / "positions.json"),
-                        ("EN_ATTENTE", tmp_path / "en-attente.json")):
+                        ("EN_ATTENTE", tmp_path / "en-attente.json"), ("DECISIONS", tmp_path / "decisions"),
+                        ("CANDIDATS", tmp_path / "candidats-du-jour.json"), ("AUDIT", tmp_path / "audit"),
+                        ("ANOMALIES", tmp_path / "anomalies.json")):
         monkeypatch.setattr(agent, nom, chemin)
-    monkeypatch.setattr(agent, "envoyer_telegram", envois.append)
+    monkeypatch.setattr(agent, "deposer", envois.append)
     return envois
 
 
@@ -69,6 +71,28 @@ def test_signaux_appliques_si_session_reussie(tmp_path, monkeypatch):
     agent.lancer_session("consigne", MARDI)
     assert json.loads(agent.ETAT.read_text())["ordres"] == [{"ticker": "AAA"}]
     assert envois == ["🟢 SIGNAL AAA"] and not agent.EN_ATTENTE.exists()
+
+
+def test_session_laisse_une_trace_des_decisions(tmp_path, monkeypatch):
+    fichiers(tmp_path, monkeypatch)
+    agent.CANDIDATS.write_text(json.dumps({"jour": "2026-10-20", "candidats": [
+        {"ticker": "AAA", "entree": 99.5}, {"ticker": "BBB", "entree": 50}]}))
+
+    def run(*a, **k):
+        etat = {"capital_initial": 3000, "ordres": [{"ticker": "AAA", "id": "x", "date_signal": "2026-10-20"}],
+                "positions": [], "fermees": []}
+        agent.EN_ATTENTE.write_text(json.dumps({"etat": etat, "messages": [],
+                                                "refus": [{"ticker": "CCC", "outil": "signal", "motif": "hors liste"}]}))
+        texte = "Alpha (AAA) : ✅ validé — ok\nBeta (BBB) : ❌ rejeté — mauvaise nouvelle"
+        return subprocess.CompletedProcess(a, 0, stdout=flux({"type": "result", "result": texte, "num_turns": 7,
+                                                               "duration_ms": 90000, "total_cost_usd": 0.4}), stderr="")
+    monkeypatch.setattr(agent.subprocess, "run", run)
+    agent.lancer_session("consigne", MARDI)
+    trace = json.loads((tmp_path / "decisions" / "2026-10-20.json").read_text())
+    assert [(c["ticker"], c["avis_claude"], c["ordre_cree"]) for c in trace["candidats"]] == [
+        ("AAA", "valide", True), ("BBB", "rejete", False)]
+    assert trace["incoherences"] == [] and trace["refus_hors_candidats"][0]["ticker"] == "CCC"
+    assert trace["cout"]["tours"] == 7 and trace["cout"]["cout_usd"] == 0.4
 
 
 def test_aucun_signal_si_session_echouee(tmp_path, monkeypatch):

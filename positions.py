@@ -15,10 +15,14 @@ from pathlib import Path
 import pandas as pd
 import yfinance as yf
 
-from commun import INDICE, NY, charger_config, envoyer_telegram
+from commun import INDICE, NY, charger_config
+from court_terme.boite import deposer
 from court_terme.messages import message_evenement
 from court_terme.portefeuille import charger, sauver
-from court_terme.simulation import avancer
+from court_terme.preglages import parametres
+from court_terme.securite import controler_baisse, controler_etat, filtrer_doublons, message_suspension, \
+    noter_anomalie, verrou
+from court_terme.simulation import ajuster_splits, avancer
 from court_terme.stats import bilan_hebdo
 from surveillance import CLOTURE, FIN_BILAN_GITHUB, seance_ouverte
 
@@ -87,23 +91,39 @@ def perf_indice(debut):
     return float(semaine), float(depuis_debut)
 
 
+def divisions(tickers):
+    """Divisions d'actions (splits) par titre : [(date, ratio)], ou None si la requête a échoué."""
+    resultat = {}
+    for ticker in tickers:
+        try:
+            serie = yf.Ticker(ticker).splits
+            resultat[ticker] = [(d.date(), float(r)) for d, r in serie.items()] if serie is not None else []
+        except Exception as erreur:
+            print(f"Divisions de {ticker} indisponibles ({erreur}) : titre non suivi ce passage-ci", file=sys.stderr)
+            resultat[ticker] = None
+    return resultat
+
+
 def envoyer(texte, dry_run):
+    """Message mis dans la boîte d'envoi : il part (envoyer.py) une fois l'état enregistré dans le dépôt."""
     if dry_run:
         print(texte + "\n")
         return
-    try:
-        envoyer_telegram(texte)
-    except Exception as erreur:
-        print(f"Échec de l'envoi Telegram : {erreur}", file=sys.stderr)
+    deposer(texte)
 
 
 def main():
+    with verrou():
+        suivre()
+
+
+def suivre():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     maintenant = datetime.now(NY)
-    p = charger_config()["court_terme"]
+    p = parametres(charger_config())
     etat = charger(ETAT, p)
     bilan = doit_faire_bilan(maintenant, etat)
     if not a_suivre(maintenant) and not bilan:
@@ -112,9 +132,28 @@ def main():
 
     suivis = sorted({e["ticker"] for e in etat["ordres"] + etat["positions"]})
     barres = barres_du_jour(suivis, maintenant) if suivis else {}
+    # Yahoo divise tout l'historique après un split : l'état est remis à la même échelle avant de simuler.
+    # Sans réponse sur les divisions d'un titre, il n'est pas suivi ce passage-ci (une fausse vente au stop
+    # serait pire qu'un retard de 5 minutes).
+    splits = divisions(suivis)
+    evts = ajuster_splits(etat, {t: d for t, d in splits.items() if d})
+    barres = {t: b for t, b in barres.items() if splits.get(t) is not None}
     taux = taux_eurusd()
-    for evt in avancer(etat, barres, taux, p):
+    evenements, doublons = filtrer_doublons(etat, evts + avancer(etat, barres, taux, p))
+    for evt in evenements:
         envoyer(message_evenement(evt), args.dry_run)
+    anomalies = [f"événement déjà annoncé, non renvoyé : {evt['id']}" for evt in doublons]
+
+    # Les nouvelles entrées sont suspendues après une forte baisse ou si l'état est incohérent ; le suivi continue.
+    jour = maintenant.date()
+    problemes, suspension_etat = controler_etat(etat, jour)
+    for texte in anomalies + problemes:
+        if args.dry_run:
+            print(f"Anomalie : {texte}")
+        else:
+            noter_anomalie("positions.py", texte)
+    if controler_baisse(etat, p, jour) or suspension_etat:
+        envoyer(message_suspension(etat), args.dry_run)
 
     if bilan:
         cours = {t: b[-1]["cloture"] for t, b in barres.items() if b}

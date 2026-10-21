@@ -19,6 +19,8 @@ def main(argv=None):
         print(f"(candidats indisponibles : {erreur})")
         return 0
     candidats = fichier.get("candidats", [])
+    if fichier.get("entrees_bloquees"):
+        print("Nouvelles entrées bloquées aujourd'hui par le code : " + " ; ".join(fichier["entrees_bloquees"]))
     print(f"Candidats du {fichier.get('jour')} : {len(candidats)}")
     for c in candidats:
         print(f"- {titre(c)} · {LIBELLES.get(c['configuration'], c['configuration'])} · "

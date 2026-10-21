@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from commun import INDICE, atr_pct, rsi
+from court_terme.calendrier import seances_entre
 
 SEANCES_3_MOIS = 63
 
@@ -56,15 +57,20 @@ def configuration_b(ind, p):
             and ind["rsi"] < p["rsi_b_max"])
 
 
-def seances_avant(jour, date_resultats):
-    """Jours ouvrés dans ]jour, date_resultats] (jours fériés ignorés)."""
+def seances_avant(jour, date_resultats, feries=False):
+    """Jours ouvrés dans ]jour, date_resultats] ; jours fériés US déduits si feries."""
+    if feries:
+        return seances_entre(jour, date_resultats)
     return max(0, int(np.busday_count(jour + timedelta(days=1), date_resultats + timedelta(days=1))))
 
 
 def exclu(ind, jour, date_resultats, p):
     """Motif d'exclusion, ou None si le titre reste éligible."""
+    if date_resultats is None and p.get("exclure_resultats_inconnus"):
+        # Une date introuvable ne prouve pas l'absence de résultats pendant le trade
+        return "date des prochains résultats inconnue"
     if date_resultats is not None and date_resultats >= jour \
-            and seances_avant(jour, date_resultats) <= p["seances_sans_resultats"]:
+            and seances_avant(jour, date_resultats, p.get("jours_feries")) <= p["seances_sans_resultats"]:
         return f"résultats le {date_resultats}"
     if abs(ind["cloture"] - ind["veille"]) > p["variation_max_atr"] * ind["atr"]:
         return "mouvement du jour supérieur à 2 ATR"
@@ -78,7 +84,7 @@ def niveaux(cloture, atr, p):
             "objectif": round(entree + p["objectif_atr"] * atr, 2)}
 
 
-def _date_resultats(resultats, ticker):
+def lire_date_resultats(resultats, ticker):
     texte = (resultats.get(ticker) or {}).get("date")
     try:
         return date.fromisoformat(str(texte)[:10]) if texte else None
@@ -86,8 +92,12 @@ def _date_resultats(resultats, ticker):
         return None
 
 
-def _indicateurs_titre(hist, ticker, indice):
+def _indicateurs_titre(hist, ticker, indice, jour):
     try:
+        clotures = hist["Close"][ticker].dropna()
+        # Données du titre en retard (ligne du jour absente) : pas de calcul sur la veille sans le dire
+        if clotures.empty or clotures.index[-1].date() != jour:
+            return None
         return indicateurs(hist["High"][ticker], hist["Low"][ticker], hist["Close"][ticker],
                            hist["Volume"][ticker], indice)
     except KeyError:
@@ -104,8 +114,8 @@ def reperer(hist, tickers, resultats, jour, p, deja_pris):
     for ticker in tickers:
         if ticker in deja_pris or ticker == INDICE:
             continue
-        ind = _indicateurs_titre(hist, ticker, indice)
-        if ind is None or exclu(ind, jour, _date_resultats(resultats, ticker), p):
+        ind = _indicateurs_titre(hist, ticker, indice, jour)
+        if ind is None or exclu(ind, jour, lire_date_resultats(resultats, ticker), p):
             continue
         if p["configurations"].get("A") and configuration_a(ind, p):
             configuration = "A"
@@ -116,6 +126,7 @@ def reperer(hist, tickers, resultats, jour, p, deja_pris):
         candidats.append({
             "ticker": ticker, "configuration": configuration,
             "cloture": round(ind["cloture"], 2), "atr": round(ind["atr"], 2), "rsi": round(ind["rsi"], 1),
+            "mm50": round(ind["mm50"], 2),
             "force_relative": round(ind["perf_3m"] - ind["perf_indice_3m"], 2),
             **niveaux(ind["cloture"], ind["atr"], p),
         })

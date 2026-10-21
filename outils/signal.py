@@ -19,6 +19,8 @@ from commun import NY, charger_config
 from court_terme import attente
 from court_terme.messages import message_signal
 from court_terme.portefeuille import ajouter_ordre, charger
+from court_terme.preglages import parametres
+from court_terme.validation import TexteRefuse, justification_signal, ticker as lire_ticker
 from positions import taux_eurusd
 
 AGENT = Path(__file__).resolve().parents[1] / "agent"
@@ -31,38 +33,51 @@ def aujourd_hui():
     return datetime.now(NY).date()
 
 
+def refuser(ticker, motif):
+    """Refus affiché à Claude et gardé pour l'évaluation de la session."""
+    print(f"refusé : {motif}")
+    attente.noter_refus(EN_ATTENTE, ticker, "signal", motif)
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("ticker")
     parser.add_argument("justification")
     args = parser.parse_args(argv)
-    ticker = args.ticker.upper()
+    try:
+        ticker = lire_ticker(args.ticker)
+        justification = justification_signal(args.justification)
+    except TexteRefuse as motif:
+        return refuser(args.ticker[:12], str(motif))
     try:
         fichier = json.loads(CANDIDATS.read_text())
     except (OSError, ValueError) as erreur:
-        print(f"refusé : candidats du jour illisibles ({erreur})")
-        return 0
+        return refuser(ticker, f"candidats du jour illisibles ({erreur})")
     if fichier.get("jour") != aujourd_hui().isoformat():
-        print(f"refusé : la liste des candidats date du {fichier.get('jour')}, pas d'aujourd'hui")
-        return 0
+        return refuser(ticker, f"la liste des candidats date du {fichier.get('jour')}, pas d'aujourd'hui")
+    # Échec prudent : seule une liste de blocages explicitement vide autorise une entrée
+    if fichier.get("entrees_bloquees") != []:
+        return refuser(ticker, "nouvelles entrées bloquées aujourd'hui : "
+                       + " ; ".join(fichier.get("entrees_bloquees") or ["contrôles du jour absents"]))
     candidat = next((c for c in fichier.get("candidats", []) if c["ticker"] == ticker), None)
     if candidat is None:
-        print(f"refusé : {ticker} n'est pas dans les candidats du jour")
-        return 0
+        return refuser(ticker, f"{ticker} n'est pas dans les candidats du jour")
 
-    p = charger_config()["court_terme"]
+    p = parametres(charger_config())
     etat = attente.lire(EN_ATTENTE)["etat"] or charger(ETAT, p)
+    if etat.get("suspension"):
+        return refuser(ticker, f"nouvelles entrées suspendues : {etat['suspension']['motif']}")
     try:
         taux = taux_eurusd()
-        ordre = ajouter_ordre(etat, candidat, candidat.get("industrie"), args.justification.strip(),
+    except Exception as erreur:
+        return refuser(ticker, f"taux EUR/USD indisponible ({erreur})")
+    try:
+        ordre = ajouter_ordre(etat, candidat, candidat.get("industrie"), justification,
                               date.fromisoformat(fichier["jour"]), taux, p)
     except ValueError as motif:
-        print(f"refusé : {motif}")
-        return 0
-    except Exception as erreur:
-        print(f"refusé : taux EUR/USD indisponible ({erreur})")
-        return 0
-    attente.ajouter(EN_ATTENTE, message_signal(ordre, taux, p["zone_entree_atr"]), etat)
+        return refuser(ticker, str(motif))
+    attente.ajouter(EN_ATTENTE, message_signal(ordre, taux, p["zone_entree_atr"], p["validite_ordre_seances"]), etat)
     print(f"signal enregistré : {ticker}, {ordre['quantite']:g} action(s), entrée {ordre['entree']:.2f} $ "
           "(envoyé sur Telegram à la fin de la session)")
     return 0

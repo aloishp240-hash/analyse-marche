@@ -3,16 +3,17 @@ from datetime import date
 import pytest
 
 from commun import charger_config
+from court_terme.preglages import parametres
 from court_terme.portefeuille import (ajouter_ordre, capital_courant, charger, quantite, sauver,
                                       verifier_ajout)
 
-p = charger_config()["court_terme"]
+p = parametres(charger_config(), "reference")
 CANDIDAT = {"ticker": "AAA", "configuration": "A", "cloture": 100, "atr": 2, "rsi": 40,
             "force_relative": 8, "entree": 99.5, "stop": 96.5, "objectif": 105.5}
 
 
 def etat_neuf():
-    return {"capital_initial": 3000, "debut": None, "ordres": [], "positions": [], "fermees": []}
+    return {"capital_initial": 3000, "debut": None, "ordres": [], "positions": [], "fermees": [], "ordres_clos": []}
 
 
 def test_quantite_risque_et_plafond():

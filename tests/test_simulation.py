@@ -1,9 +1,10 @@
 from datetime import date, timedelta
 
 from commun import charger_config
+from court_terme.preglages import parametres
 from court_terme.simulation import avancer
 
-p = charger_config()["court_terme"]
+p = parametres(charger_config(), "reference")
 J0 = date(2026, 10, 19)
 
 

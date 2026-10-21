@@ -15,12 +15,19 @@ import sys
 from datetime import datetime, time
 from pathlib import Path
 
-from commun import INDICE, NY, charger_config, charger_tickers, envoyer_telegram, fondamentaux, \
-    historique_journalier, nom_societe, prochains_resultats
+from commun import INDICE, NY, charger_config, charger_tickers, fondamentaux, historique_journalier, nom_societe, \
+    prochains_resultats
 from court_terme import attente
-from court_terme.messages import LIBELLES, titre
+from court_terme.audit import message_audit, points_nouveaux, rapport
+from court_terme.boite import deposer
+from court_terme.evaluation import decision_du_jour
+from court_terme.messages import LIBELLES, message_evenement, titre
 from court_terme.portefeuille import capital_courant, charger, sauver
-from court_terme.strategie import reperer
+from court_terme.preglages import parametres
+from court_terme.securite import ANOMALIES, controle_donnees, controler_etat, message_suspension, noter_anomalie, \
+    suivi_en_retard, verrou
+from court_terme.simulation import annuler_avant_resultats
+from court_terme.strategie import lire_date_resultats, reperer
 
 AGENT = Path(__file__).resolve().parent / "agent"
 ETAT = AGENT / "positions.json"
@@ -28,6 +35,8 @@ CANDIDATS = AGENT / "candidats-du-jour.json"
 CONSIGNE = AGENT / "consigne.md"
 EN_ATTENTE = AGENT / "en-attente.json"
 SESSIONS = AGENT / "sessions"
+DECISIONS = AGENT / "decisions"
+AUDIT = AGENT / "audit"
 HEURE_AGENT = time(16, 45)
 TENTATIVES_MAX = 2
 DUREE_MAX_S = 1200
@@ -131,9 +140,17 @@ def ecrire_journal(jour, etapes, bilan, reussie):
     (SESSIONS / f"{jour.isoformat()}-journal.md").write_text("\n".join(lignes))
 
 
+# Secrets retirés de l'environnement de claude : Telegram (les messages partent d'agent.py) et jetons GitHub
+SECRETS = ("TELEGRAM_", "GH_TOKEN", "GITHUB_TOKEN", "ACTIONS_RUNTIME_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_")
+
+
 def environnement_claude():
-    """Environnement du processus claude, sans les secrets Telegram : les messages partent d'agent.py."""
-    return {k: v for k, v in os.environ.items() if not k.startswith("TELEGRAM_")}
+    """Environnement du processus claude, sans les secrets dont il n'a pas besoin.
+
+    Restent CLAUDE_CODE_OAUTH_TOKEN, indispensable à claude, et les identifiants Reddit dont a besoin
+    outils/reddit.py (lancé par claude, il hérite de son environnement).
+    """
+    return {k: v for k, v in os.environ.items() if not k.startswith(SECRETS)}
 
 
 def _echecs(jour):
@@ -153,10 +170,18 @@ def ecrire_session(jour, texte):
 
 
 def envoyer(texte):
+    """Message mis dans la boîte d'envoi : il part (envoyer.py) une fois l'état enregistré dans le dépôt."""
+    deposer(texte)
+
+
+def ecrire_decision(jour, sortie, final, reussie):
+    """Trace de la session pour évaluer Claude (evaluation_claude.py) ; écrite avant d'appliquer ses signaux."""
     try:
-        envoyer_telegram(texte)
-    except Exception as exception:
-        print(f"Échec de l'envoi Telegram : {exception}", file=sys.stderr)
+        candidats = json.loads(CANDIDATS.read_text()).get("candidats", [])
+    except (OSError, ValueError):
+        candidats = []
+    trace = decision_du_jour(jour.isoformat(), candidats, attente.lire(EN_ATTENTE), final, sortie, reussie)
+    sauver(trace, DECISIONS / f"{jour.isoformat()}.json")
 
 
 def appliquer_attente():
@@ -187,6 +212,7 @@ def lancer_session(consigne, jour):
         code, erreur = None, str(exception)
     final, etapes, bilan = lire_flux(sortie)
     ecrire_journal(jour, etapes, bilan, code == 0)
+    ecrire_decision(jour, sortie, final, code == 0)
     if code == 0:
         appliquer_attente()
         ecrire_session(jour, final)
@@ -217,7 +243,54 @@ def resume_portefeuille(etat):
     return "\n".join(lignes)
 
 
+def lire_json(chemin, defaut=None):
+    try:
+        return json.loads(Path(chemin).read_text())
+    except (OSError, ValueError):
+        return defaut
+
+
+def ecrire_audit(jour, dry_run=False, candidats=None):
+    """Rapport d'audit de la séance ; seuls les points à vérifier nouveaux partent sur Telegram."""
+    etat = charger(ETAT, parametres(charger_config()))
+    echecs = _echecs(jour)
+    texte, points = rapport(jour.isoformat(), etat, candidats or lire_json(CANDIDATS), lire_json(DECISIONS / f"{jour.isoformat()}.json"),
+                            lire_json(ANOMALIES, []), int(echecs.read_text() or 0) if echecs.exists() else 0)
+    if dry_run:
+        print("\n--- Audit ---\n" + texte)
+        return
+    chemin = AUDIT / f"{jour.isoformat()}.md"
+    nouveaux = points_nouveaux(points, chemin.read_text() if chemin.exists() else "")
+    AUDIT.mkdir(parents=True, exist_ok=True)
+    chemin.write_text(texte)
+    if nouveaux:
+        envoyer(message_audit(jour.isoformat(), nouveaux))
+
+
 def main():
+    with verrou():
+        fait = preparer()
+        if fait:
+            ecrire_audit(*fait)
+
+
+def entrees_bloquees(hist, tickers, etat, jour_attendu, jour):
+    """(motifs qui interdisent tout nouvel ordre aujourd'hui, titres écartés pour données invalides).
+
+    Échec prudent : un doute sur les données ou sur le suivi des positions n'aboutit jamais à un achat.
+    """
+    motifs, ecartes = controle_donnees(hist, tickers, jour_attendu, INDICE)
+    retard = suivi_en_retard(etat, jour)
+    if retard:
+        motifs.append("suivi des positions pas à jour (" + " ; ".join(retard[:3]) + ")")
+    if etat.get("suspension"):
+        motifs.append(f"nouvelles entrées suspendues depuis le {etat['suspension']['depuis']} : "
+                      f"{etat['suspension']['motif']}")
+    return motifs, ecartes
+
+
+def preparer():
+    """Passage de l'agent ; renvoie (séance traitée, dry_run, candidats), ou None s'il n'y avait rien à faire."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -232,36 +305,70 @@ def main():
     if not args.force and not doit_lancer(maintenant, jour, session_faite(jour)):
         return
 
-    p = charger_config()["court_terme"]
+    p = parametres(charger_config())
     etat = charger(ETAT, p)
+    resultats = prochains_resultats(tickers)
+    annulations = annuler_avant_resultats(etat, jour, resultats, p)
+    problemes, suspension_nouvelle = controler_etat(etat, jour)
+    if (annulations or suspension_nouvelle) and not args.dry_run:
+        sauver(etat, ETAT)
+    if suspension_nouvelle:
+        print(message_suspension(etat)) if args.dry_run else envoyer(message_suspension(etat))
+    bloquants, ecartes = entrees_bloquees(hist, tickers, etat, jour if args.force else maintenant.date(), jour)
+    for texte in problemes + bloquants + [f"{t} écarté : {m}" for t, m in ecartes.items()]:
+        if args.dry_run:
+            print(f"Anomalie : {texte}")
+        else:
+            noter_anomalie("agent.py", texte)
+    for evt in annulations:
+        if args.dry_run:
+            print(message_evenement(evt))
+        else:
+            envoyer(message_evenement(evt))
     suivis = {e["ticker"] for e in etat["ordres"] + etat["positions"]}
-    candidats = reperer(hist, tickers, prochains_resultats(tickers), jour, p, suivis)
+    candidats = reperer(hist, [t for t in tickers if t not in ecartes], resultats, jour, p, suivis)
+    # Entrées bloquées : les candidats sont gardés pour information, mais pas proposés à Claude
+    non_proposes = [c["ticker"] for c in candidats] if bloquants else []
+    if bloquants:
+        candidats = []
     infos = fondamentaux([c["ticker"] for c in candidats], cache=False) if candidats else {}
     for c in candidats:
         c["industrie"] = (infos.get(c["ticker"]) or {}).get("industry")
         c["nom"] = nom_societe(infos.get(c["ticker"]), c["ticker"])
-    contenu = json.dumps({"jour": jour.isoformat(), "candidats": candidats}, indent=2, ensure_ascii=False)
+        # Contexte connu avant l'entrée, recopié dans l'ordre puis dans le trade
+        date_resultats = lire_date_resultats(resultats, c["ticker"])
+        c["date_resultats"] = date_resultats.isoformat() if date_resultats else None
+    # donnees_au : dernière séance présente dans l'historique, pour voir d'un coup d'œil des données périmées
+    contenu = json.dumps({"jour": jour.isoformat(), "donnees_au": hist.index[-1].date().isoformat(),
+                          "entrees_bloquees": bloquants, "candidats_non_proposes": non_proposes,
+                          "titres_ecartes": ecartes, "candidats": candidats}, indent=2, ensure_ascii=False)
 
     if args.dry_run:
         print(contenu)
     else:
         CANDIDATS.write_text(contenu + "\n")
+    if bloquants:
+        alerte = "⛔ AGENT COURT TERME — aucune nouvelle entrée aujourd'hui :\n" + "\n".join(f"- {m}" for m in bloquants)
+        print(alerte) if args.dry_run else envoyer(alerte)
     if not candidats and not suivis:
         texte = "Aucun candidat aujourd'hui et aucune position en cours : pas de session Claude."
         print(texte)
         if not args.dry_run:
             ecrire_session(jour, texte)
             envoyer(f"🤖 AGENT COURT TERME — {texte}")
-        return
+        return jour, args.dry_run, json.loads(contenu)
 
     liste = ", ".join(f"{titre(c)}, {LIBELLES.get(c['configuration'])}" for c in candidats) or "aucun"
-    consigne = (f"{CONSIGNE.read_text().strip()}\n\n## Contexte\nDate : {jour.isoformat()}\n"
+    blocage = ("Nouvelles entrées bloquées aujourd'hui par le code (signal.py refusera tout signal) : "
+               + " ; ".join(bloquants) + "\nSurveille seulement les ordres et positions en cours.\n") if bloquants else ""
+    consigne = (f"{CONSIGNE.read_text().strip()}\n\n## Contexte\nDate : {jour.isoformat()}\n{blocage}"
                 f"Candidats du jour : {liste}\n\nPortefeuille fictif :\n{resume_portefeuille(etat)}\n")
     if args.dry_run:
         print("\n--- Consigne ---\n" + consigne)
         print("--- Commande ---\n" + " ".join(commande_claude("<consigne>")))
-        return
+        return jour, True, json.loads(contenu)
     lancer_session(consigne, jour)
+    return jour, False, json.loads(contenu)
 
 
 if __name__ == "__main__":

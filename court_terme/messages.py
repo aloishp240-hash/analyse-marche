@@ -21,7 +21,7 @@ def approx(prix):
     return f"{prix:.0f}" if prix >= 100 else f"{prix:.1f}" if prix >= 10 else f"{prix:.2f}"
 
 
-def message_signal(ordre, taux_eurusd, zone_entree_atr):
+def message_signal(ordre, taux_eurusd, zone_entree_atr, validite_seances=3):
     """Signal avec une zone d'achat autour de l'entrée, que la simulation exécute au prix d'entrée exact."""
     risque = (ordre["entree"] - ordre["stop"]) * ordre["quantite"] / taux_eurusd
     montant = ordre["entree"] * ordre["quantite"] / taux_eurusd
@@ -32,7 +32,9 @@ def message_signal(ordre, taux_eurusd, zone_entree_atr):
         f"(moyenne visée ≈ {approx(ordre['entree'])} $)",
         f"Objectif ≈ {approx(ordre['objectif'])} $ · Stop ≈ {approx(ordre['stop'])} $",
         f"Quantité {ordre['quantite']:g} (≈ {montant:.0f} €) · Risque ≈ {risque:.0f} €",
-        "Valable 3 séances (3 jours de bourse, 15h30-22h à Paris)",
+        f"Valable {validite_seances} séances ({validite_seances} jours de bourse, 15h30-22h à Paris)",
+        # Référence à reprendre dans journal_personnel.py si vous passez vous-même un ordre réel
+        f"Portefeuille fictif (simulation) · réf. {ordre['id']}" if ordre.get("id") else "Portefeuille fictif (simulation)",
         "",
         "Pourquoi Claude achète :",
         detailler(ordre["justification"]),
@@ -40,7 +42,8 @@ def message_signal(ordre, taux_eurusd, zone_entree_atr):
 
 
 def message_evenement(evt):
-    t, prix, r = titre(evt), f"{evt['prix']:.2f} $", evt.get("resultat_eur")
+    t, r = titre(evt), evt.get("resultat_eur")
+    prix = f"{evt['prix']:.2f} $" if evt.get("prix") is not None else ""
     resultat = f" · {r:+.2f} €" if r is not None else ""
     return {
         "entree": f"📥 ENTRÉE — {t} achetée à {prix}",
@@ -50,4 +53,7 @@ def message_evenement(evt):
         "temps": f"⏱️ STOP TEMPOREL — {t} vendue à {prix} (15e séance){resultat}",
         "decision": f"✋ VENTE PAR CLAUDE — {t} vendue à {prix} à l'ouverture{resultat}",
         "stop_remonte": f"🛡️ STOP REMONTÉ — {t} : stop au prix d'entrée {prix}",
+        "annule": f"🚫 ORDRE ANNULÉ — {t} (limite {prix}) : {evt.get('motif', '')}",
+        "split": f"✂️ DIVISION DE L'ACTION — {t} : 1 action devient {evt.get('ratio', 0):g}, "
+                 f"prix, stop et objectif ajustés",
     }[evt["type"]]

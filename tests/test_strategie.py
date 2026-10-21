@@ -5,11 +5,12 @@ import pandas as pd
 
 import commun
 from commun import charger_config
+from court_terme.preglages import parametres
 from court_terme import strategie
 from court_terme.strategie import (configuration_a, configuration_b, exclu, indicateurs, niveaux,
                                    reperer, seances_avant)
 
-p = charger_config()["court_terme"]
+p = parametres(charger_config(), "reference")
 
 
 def test_niveaux():
@@ -72,7 +73,7 @@ def test_reperer_trie_exclut_et_limite(monkeypatch):
     base = dict(cloture=100, veille=99.5, mm20=99.5, mm50=95, mm200=90, rsi=40, atr=2, perf_indice_3m=5,
                 plus_haut_20=110, volume=1e6, volume_moyen_20=1e6)
     forces = {t: 10 + i for i, t in enumerate(tickers)}
-    monkeypatch.setattr(strategie, "_indicateurs_titre", lambda hist, t, indice: {**base, "perf_3m": 5 + forces[t]})
+    monkeypatch.setattr(strategie, "_indicateurs_titre", lambda hist, t, indice, jour: {**base, "perf_3m": 5 + forces[t]})
     hist = pd.DataFrame()
     candidats = reperer(hist, tickers, {}, date(2026, 10, 19), p, deja_pris={"T6"})
     assert [c["ticker"] for c in candidats] == ["T5", "T4", "T3", "T2", "T1"]
