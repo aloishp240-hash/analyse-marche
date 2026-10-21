@@ -3,5 +3,7 @@
   "debut": null,
   "ordres": [],
   "positions": [],
-  "fermees": []
+  "fermees": [],
+  "ordres_clos": [],
+  "evenements_annonces": []
 }
