@@ -2,7 +2,7 @@
 portefeuille et propose la liste des personnes à copier.
 
     python backtest_copie.py                        télécharge (long), écrit rapport_copie.md et copie/*.json
-    python backtest_copie.py --sans-telechargement  refait le calcul avec les déclarations déjà lues
+    python backtest_copie.py --sans-telechargement  refait le calcul 100 % hors ligne (déclarations, cours et actions gardés)
     python backtest_copie.py --valider              enregistre la proposition dans copie/suivis.json (sur demande)
 
 Les déclarations déjà lues sont gardées dans donnees/copie/ : un deuxième lancement ne redemande que le reste.
@@ -29,6 +29,7 @@ DEBUT_DECLARATIONS = date(2024, 1, 1)
 DEBUT_COURS = date(2023, 11, 15)  # de quoi calculer l'univers (20 séances) des premières publications de 2024
 PREMIER_TRIMESTRE = (2024, 1)
 LOT_COURS = 200
+EXEMPLES = 5  # titres cités comme exemples quand des cours ou des nombres d'actions manquent
 
 
 def _message(erreur):
@@ -84,9 +85,29 @@ def _jeu_trimestriel(client, annee, trimestre, dossier):
     return ops
 
 
-def _lire_dirigeants(sec, dossier, date_choix):
+def _achat_utile(op, p):
+    return op.sens == "achat" and (op.famille != "dirigeant" or achat_retenu(op, p))
+
+
+def _garder_utiles(ops, p, suivis):
+    """Opérations utiles de ops ; `suivis` (personne, titre) retient les achats utiles déjà vus, pour garder leurs ventes
+    même dans un lot suivant."""
+    suivis.update((op.personne_id, op.ticker) for op in ops if _achat_utile(op, p))
+    return [op for op in ops
+            if _achat_utile(op, p) or (op.sens == "vente" and (op.personne_id, op.ticker) in suivis)]
+
+
+def filtrer(ops, p):
+    """Opérations utiles : tous les achats d'élus et de fonds, les achats de dirigeants qui passent le filtre, et les
+    ventes d'une personne sur un titre qu'elle a acheté. Le reste ne peut influencer ni la mesure ni la simulation."""
+    return _garder_utiles(ops, p, set())
+
+
+def _lire_dirigeants(sec, dossier, date_choix, p):
+    """Les jeux trimestriels sont filtrés un par un : on ne garde pas les millions d'opérations brutes en mémoire."""
     client = sec()
     ops, lues, illisibles, absents, details, dernier = [], 0, 0, [], [], None
+    brutes, suivis = 0, set()
     for annee, trimestre in _trimestres(PREMIER_TRIMESTRE, (date_choix.year, (date_choix.month - 1) // 3 + 1)):
         try:
             ops_trimestre = _jeu_trimestriel(client, annee, trimestre, dossier)
@@ -98,14 +119,17 @@ def _lire_dirigeants(sec, dossier, date_choix):
             absents.append((annee, trimestre))
             continue
         lues += 1
-        ops.extend(ops_trimestre)
+        brutes += len(ops_trimestre)
+        ops.extend(_garder_utiles(ops_trimestre, p, suivis))
         dernier = (annee, trimestre)
     trous = [q for q in absents if dernier is not None and q < dernier]
     illisibles += len(trous)
     details += [f"{_nom_trimestre(*q)} : jeu absent" for q in trous]
     if dernier is not None:
         details.insert(0, f"dernier trimestre publié : {_nom_trimestre(*dernier)}")
+    details.insert(0, f"avant filtre : {brutes} opérations")
     return ops, {"lues": lues, "illisibles": illisibles, "libelle": ["jeu trimestriel lu", "jeux trimestriels lus"],
+                 "a_part": True,  # des jeux et non des PDF : hors du total des déclarations lues et illisibles
                  "detail": " ; ".join(details) or None,
                  "dernier_trimestre": _nom_trimestre(*dernier) if dernier else None}
 
@@ -141,18 +165,6 @@ def _lire_source(nom, lecture):
     return ops, fiche
 
 
-def _achat_utile(op, p):
-    return op.sens == "achat" and (op.famille != "dirigeant" or achat_retenu(op, p))
-
-
-def filtrer(ops, p):
-    """Opérations utiles : tous les achats d'élus et de fonds, les achats de dirigeants qui passent le filtre, et les
-    ventes d'une personne sur un titre qu'elle a acheté. Le reste ne peut influencer ni la mesure ni la simulation."""
-    suivis = {(op.personne_id, op.ticker) for op in ops if _achat_utile(op, p)}
-    return [op for op in ops
-            if _achat_utile(op, p) or (op.sens == "vente" and (op.personne_id, op.ticker) in suivis)]
-
-
 def telecharger_tout(config, dossier, date_choix):
     """(opérations utiles, lecture) de toutes les sources ; une source en échec n'arrête pas les autres."""
     p = config["copie"]
@@ -160,7 +172,7 @@ def telecharger_tout(config, dossier, date_choix):
     senat_lu = p.get("senat_accepte") is True
     sources = [("Chambre", lambda: _lire_chambre(dossier, date_choix)),
                ("Sénat", (lambda: _lire_senat(config, dossier, date_choix)) if senat_lu else None),
-               ("Form 4 (jeux trimestriels de la SEC)", lambda: _lire_dirigeants(sec, dossier, date_choix)),
+               ("Form 4 (jeux trimestriels de la SEC)", lambda: _lire_dirigeants(sec, dossier, date_choix, p)),
                ("13F (fonds)", lambda: _lire_fonds(sec, dossier, date_choix, p))]
     ops, fiches = [], []
     for nom, lecture in sources:
@@ -207,26 +219,77 @@ def _relire_lecture(dossier):
 
 # --- calcul ---
 
-def _charger_cours(tickers, debut, fin, dossier):
+def _cours_du_cache(tickers, debut, fin, dossier):
+    """Cours déjà gardés sur disque par cours.charger, sans rien demander à Yahoo ; un titre absent du cache (ou dont
+    le cache ne couvre pas la période) est simplement absent du résultat."""
+    resultat = {}
+    for ticker in tickers:
+        try:
+            entree = pd.read_pickle(cours._fichier(dossier, ticker))
+            if entree["debut"] <= debut and entree["fin"] >= fin:
+                df = entree["cours"].loc[pd.Timestamp(debut):pd.Timestamp(fin)]
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    resultat[ticker] = df
+        except Exception:
+            continue
+    return resultat
+
+
+def _actions_du_cache(tickers, dossier):
+    """Nombres d'actions déjà gardés dans actions.json, sans rien demander à Yahoo."""
+    try:
+        connues = json.loads((dossier / "actions.json").read_text())
+    except (OSError, ValueError):
+        return {}
+    return {t: connues[t] for t in tickers if t in connues} if isinstance(connues, dict) else {}
+
+
+def _charger_cours(tickers, debut, fin, dossier, hors_ligne=False):
+    if hors_ligne:
+        return _cours_du_cache(tickers, debut, fin, dossier)
     historique = {}
     for i in range(0, len(tickers), LOT_COURS):
         historique.update(cours.charger(tickers[i:i + LOT_COURS], debut, fin, dossier))
     return historique
 
 
-def analyser(ops, lecture, p, date_choix, debut_simulation, dossier):
-    """(classement, bilan des dirigeants, résultats des deux simulations) ; complète `lecture`."""
+def _manquants(tickers):
+    """Nombre de titres et quelques exemples, pour le rapport."""
+    tickers = sorted(tickers)
+    return {"nombre": len(tickers), "exemples": tickers[:EXEMPLES]}
+
+
+def _phrase_manquants(nom, manquants):
+    exemples = f" (par exemple {', '.join(manquants['exemples'])})" if manquants["exemples"] else ""
+    return f"{manquants['nombre']} {nom}{exemples}"
+
+
+def _ligne_titres(lecture):
+    sans_cours, sans_actions = _phrase_manquants("sans cours", lecture["sans_cours"]), _phrase_manquants(
+        "sans nombre d'actions", lecture["sans_actions"])
+    return f"Titres : {sans_cours} ; {sans_actions}"
+
+
+def analyser(ops, lecture, p, date_choix, debut_simulation, dossier, hors_ligne=False):
+    """(classement, bilan des dirigeants, résultats des deux simulations) ; complète `lecture`. Hors ligne, rien n'est
+    demandé à Yahoo : les titres absents du cache sont comptés sans cours."""
     dossier_cours = dossier / "cours"
     tickers = sorted({op.ticker for op in ops})
     print(f"Cours : {len(tickers)} titres, QQQ et EURUSD", flush=True)
-    reference = cours.charger(["QQQ", "EURUSD=X"], DEBUT_COURS, date_choix, dossier_cours)
+    reference = _charger_cours(["QQQ", "EURUSD=X"], DEBUT_COURS, date_choix, dossier_cours, hors_ligne)
     qqq = reference.get("QQQ")
     if qqq is None:
-        raise RuntimeError("cours de QQQ introuvables : impossible de comparer")
+        raise RuntimeError("cours de QQQ introuvables" + (" dans le cache" if hors_ligne else "")
+                           + " : impossible de comparer")
     eurusd = reference.get("EURUSD=X")
     lecture["eurusd_absent"] = eurusd is None
-    historique = _charger_cours(tickers, DEBUT_COURS, date_choix, dossier_cours)
-    actions = cours.actions_en_circulation([t for t in tickers if t in historique], dossier_cours)
+    historique = _charger_cours(tickers, DEBUT_COURS, date_choix, dossier_cours, hors_ligne)
+    avec_cours = [t for t in tickers if t in historique]
+    actions = (_actions_du_cache(avec_cours, dossier_cours) if hors_ligne
+               else cours.actions_en_circulation(avec_cours, dossier_cours))
+    lecture["sans_cours"] = _manquants(set(tickers) - set(avec_cours))
+    lecture["sans_actions"] = _manquants({t for t in avec_cours if t not in actions})
+    print(_ligne_titres(lecture), flush=True)
     classement = mesure.selectionner(ops, historique, qqq, actions, date_choix, p)
     bilan_dirigeants = mesure.bilan_dirigeants(ops, historique, qqq, actions, date_choix, p)
     en_ligne = {ligne["personne_id"] for ligne in classement}
@@ -245,12 +308,19 @@ def _bilan_json(b):
                   else valeur) for cle, valeur in b.items()}
 
 
+def _sources_en_echec(lecture):
+    return [s["nom"] for s in lecture.get("sources", []) if s.get("etat") == "echec"]
+
+
 def _ecrire_resultats(classement, bilan_dirigeants, resultats, lecture, date_choix, dossier_copie, fichier_rapport):
     fichier_rapport.write_text(rapport.ecrire(classement, bilan_dirigeants, resultats, lecture, date_choix),
                                encoding="utf-8")
     retenus = [{"personne_id": ligne["personne_id"], "personne": ligne["personne"], "famille": ligne["famille"]}
                for ligne in classement if ligne["retenu"]]
-    _ecrire_json(dossier_copie / "proposition.json", {"date_choix": date_choix.isoformat(), "personnes": retenus})
+    echecs = _sources_en_echec(lecture)
+    _ecrire_json(dossier_copie / "proposition.json",
+                 {"date_choix": date_choix.isoformat(), "complet": not echecs, "sources_en_echec": echecs,
+                  "personnes": retenus})
     bilans = {ligne["personne_id"]: _bilan_json(ligne["bilan"]) for ligne in classement}
     bilans["dirigeants"] = _bilan_json(bilan_dirigeants)
     _ecrire_json(dossier_copie / "bilans.json", bilans)
@@ -273,7 +343,7 @@ def lancer(sans_telechargement=False, config=None, dossier_donnees=DONNEES, doss
         _sauver_lecture(dossier_donnees, ops, lecture)  # avant les cours : un incident plus loin ne perd rien
     try:
         classement, bilan_dirigeants, resultats = analyser(ops, lecture, p, date_choix, debut_simulation,
-                                                           dossier_donnees)
+                                                           dossier_donnees, hors_ligne=sans_telechargement)
     except RuntimeError as erreur:
         print(f"Arrêt : {erreur}")
         return 1
@@ -284,9 +354,15 @@ def lancer(sans_telechargement=False, config=None, dossier_donnees=DONNEES, doss
     nombre = len(retenus)
     print(f"Résumé : {lues} lues, {illisibles} illisibles ({part} %), {nombre} "
           f"{'personne retenue' if nombre <= 1 else 'personnes retenues'}.")
+    print(_ligne_titres(lecture) + ".")
     for personne in retenus:
         print(f"  - {personne['personne']} ({personne['famille']})")
     print(f"Rapport : {fichier_rapport}")
+    echecs = _sources_en_echec(lecture)
+    if echecs:
+        print(f"ATTENTION : source(s) en échec : {', '.join(echecs)}. La proposition est incomplète et --valider la "
+              "refusera.")
+        return 1
     return 0
 
 
@@ -300,6 +376,15 @@ def valider(dossier_copie=COPIE, aujourd_hui=None):
     except (OSError, ValueError, TypeError, KeyError):
         print("Aucune proposition à valider : lance d'abord backtest_copie.py.")
         return 1
+    if proposition.get("complet") is not True:
+        echecs = proposition.get("sources_en_echec")
+        if echecs:
+            print(f"Validation refusée : la proposition est incomplète, source(s) en échec : {', '.join(echecs)}. "
+                  "Relance backtest_copie.py quand ces sources répondent.")
+        else:
+            print("Validation refusée : la proposition ne dit pas si toutes les sources ont été lues. Relance "
+                  "backtest_copie.py (ou backtest_copie.py --sans-telechargement) pour la refaire.")
+        return 1
     _ecrire_json(dossier_copie / "suivis.json",
                  {"valide_le": (aujourd_hui or date.today()).isoformat(), "personnes": personnes})
     print(f"{len(personnes)} personne(s) validée(s) dans {dossier_copie / 'suivis.json'}")
@@ -311,7 +396,8 @@ def main(argv=None):
     parseur.add_argument("--valider", action="store_true",
                          help="enregistre copie/proposition.json dans copie/suivis.json (sur demande de l'utilisateur)")
     parseur.add_argument("--sans-telechargement", action="store_true",
-                         help="réutilise les déclarations déjà lues (les cours manquants restent demandés)")
+                         help="entièrement hors ligne : réutilise les déclarations, les cours et les nombres d'actions gardés sur "
+                              "disque (un titre absent du cache est compté sans cours)")
     options = parseur.parse_args(argv)
     if options.valider:
         return valider()

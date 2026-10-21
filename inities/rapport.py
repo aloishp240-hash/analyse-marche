@@ -13,8 +13,10 @@ _SCENARIOS = (("sans_frais", "Sans frais"), ("avec_frais", "Avec frais (1 € + 
 def _nombre(valeur, decimales=1, signe=False):
     if valeur is None:
         return "—"
-    texte = f"{valeur:{'+' if signe else ''},.{decimales}f}".replace(",", " ").replace(".", ",")
-    return texte
+    arrondi = round(valeur, decimales)
+    if arrondi == 0:
+        arrondi = 0.0  # ni « -0,0 » ni « +0,0 »
+    return f"{arrondi:{'+' if signe and arrondi else ''},.{decimales}f}".replace(",", " ").replace(".", ",")
 
 
 def _pct(valeur):
@@ -30,7 +32,7 @@ def _part(valeur):
 
 
 def _jours(valeur):
-    return "—" if valeur is None else f"{valeur:.0f} j"
+    return "—" if valeur is None else f"{_nombre(valeur)} j"  # une décimale : la règle est « moins de 30 jours »
 
 
 def _dollars(valeur):
@@ -81,6 +83,10 @@ def _dirigeants(b):
     if not b or not b.get("achats"):
         return ["Aucun achat de dirigeant ne passe le filtre (code P, au moins 100 000 $, dirigeant ou administrateur, "
                 "titre dans l'univers)."]
+    if b.get("part_battu") is None:
+        return [f"- {_pluriel(b['achats'], 'achat', 'achats')} retenus, délai moyen {_jours(b['delai_moyen'])}, mais "
+                "aucune copie n'a encore 3 mois de recul : pas encore mesurable. Rien à conclure sur QQQ.",
+                "- Ces achats sont copiés un par un, sans suivre la personne."]
     verdict = "bat QQQ" if bat_qqq(b) else "ne bat pas QQQ"
     return [
         f"- {_pluriel(b['achats'], 'achat', 'achats')} retenus, délai moyen {_jours(b['delai_moyen'])}.",
@@ -138,8 +144,8 @@ def ligne_source(s):
 
 
 def totaux(lecture):
-    """(déclarations lues, illisibles) de toutes les sources lues."""
-    sources = [s for s in lecture.get("sources", []) if s.get("etat") == "lue"]
+    """(déclarations lues, illisibles) des sources lues, sans les jeux trimestriels de la SEC, comptés à part."""
+    sources = [s for s in lecture.get("sources", []) if s.get("etat") == "lue" and not s.get("a_part")]
     return sum(s.get("lues", 0) for s in sources), sum(s.get("illisibles", 0) for s in sources)
 
 
@@ -148,7 +154,7 @@ def _donnees(lecture):
     lignes = [f"- {ligne_source(s)}" for s in sources]
     lues, illisibles = totaux(lecture)
     if lues + illisibles:
-        lignes.append(f"- Au total : {lues} lues, {illisibles} illisibles "
+        lignes.append(f"- Au total (déclarations en PDF, hors jeux trimestriels) : {lues} lues, {illisibles} illisibles "
                       f"({_nombre(illisibles / (lues + illisibles) * 100)} %).")
     if "personnes_sans_ligne" in lecture:
         lignes.append(f"- {_pluriel(lecture['personnes_sans_ligne'], 'personne', 'personnes')} sans aucun achat retenu "
@@ -156,6 +162,13 @@ def _donnees(lecture):
     if "sans_ticker" in lecture:
         lignes.append(f"- {_pluriel(lecture['sans_ticker'], 'nom de fonds', 'noms de fonds')} sans ticker sûr : "
                       "ignorés.")
+    for cle, texte in (("sans_cours", "sans cours (Yahoo n'en a pas, ou ils ne sont pas gardés) : leurs achats ne sont "
+                                      "ni mesurés ni copiés"),
+                       ("sans_actions", "sans nombre d'actions : leurs achats sortent de l'univers")):
+        m = lecture.get(cle)
+        if m is not None:
+            exemples = f" (par exemple {', '.join(m['exemples'])})" if m.get("exemples") else ""
+            lignes.append(f"- {_pluriel(m['nombre'], 'titre', 'titres')} {texte}{exemples}.")
     sans_13f = lecture.get("fonds_sans_13f")
     if sans_13f is not None:
         noms = f" ({', '.join(sans_13f)})" if sans_13f else ""
@@ -197,8 +210,11 @@ def ecrire(classement, bilan_dirig, resultats, lecture, date_choix):
         ("Portefeuille au fil de l'eau (oct. 2025 → oct. 2026)", _portefeuille(resultats)),
         ("Données", _donnees(lecture)),
     ]
+    echecs = [s["nom"] for s in lecture.get("sources", []) if s.get("etat") == "echec"]
     lignes = [
         "# Copie d'initiés : test sur le passé", "",
+        *([f"**Attention : proposition incomplète.** Source(s) en échec : {', '.join(echecs)}. Ne pas la valider avant "
+           "d'avoir relancé.", ""] if echecs else []),
         f"Liste choisie au {date_choix.strftime('%d/%m/%Y')}, sur la fenêtre du {debut.strftime('%d/%m/%Y')} au "
         f"{date_choix.strftime('%d/%m/%Y')} ({fenetre} mois). Chaque copie est mesurée en achetant à l'ouverture de la "
         "séance qui suit la publication de la déclaration, et comparée à QQQ aux mêmes dates.", ""]

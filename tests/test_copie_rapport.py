@@ -101,15 +101,82 @@ def test_rapport_dirigeants_et_senat_lu():
     assert "Sénat non lu" not in texte
 
 
+def test_rapport_delai_avec_une_decimale_et_pas_de_zero_negatif():
+    ligne = _ligne("Durand", True)
+    ligne["bilan"].update(delai_moyen=29.6, r3=-0.02, q3=0.01)
+    texte = ecrire([ligne], _bilan_vide(), {}, _lecture(), DATE_CHOIX)
+    classe = texte.split("## Classement complet")[1].split("## Dirigeants")[0]
+    assert "29,6 j" in classe
+    assert "-0,0" not in texte and "+0,0" not in texte and "0,0 % / +0,0" not in texte
+
+
+def test_rapport_classement_avec_des_valeurs_absentes():
+    b = {"achats": 2, "delai_moyen": None, "dernier_achat": None, "r3": None, "q3": None, "r6": None, "q6": None,
+         "mesures": [], "r": None, "q": None, "part_battu": None}
+    ligne = {"personne_id": "politicien:chambre:Vide|X|CA-01", "personne": "Vide", "famille": "politicien", "bilan": b,
+             "retenu": False, "motif": "pas assez d'achats mesurables"}
+    texte = ecrire([ligne], b, {}, _lecture(), DATE_CHOIX)
+    classe = texte.split("## Classement complet")[1].split("## Dirigeants")[0]
+    assert "| Vide |" in classe and "—" in classe
+    assert "None" not in texte and "nan" not in texte.lower().replace("financ", "")
+
+
+def test_rapport_dirigeants_sans_copie_mesurable():
+    b = {"achats": 3, "delai_moyen": 4.0, "dernier_achat": date(2026, 9, 1), "r3": None, "q3": None, "r6": None,
+         "q6": None, "mesures": [], "r": None, "q": None, "part_battu": None}
+    texte = ecrire([], b, {}, _lecture(), DATE_CHOIX)
+    dirigeants_ = texte.split("## Dirigeants")[1].split("## Portefeuille")[0]
+    assert "pas encore mesurable" in dirigeants_ and "ne bat pas" not in dirigeants_
+
+
+def test_rapport_titres_sans_cours_et_sans_actions():
+    lecture = _lecture(sans_cours={"nombre": 12, "exemples": ["AAA", "BBB"]},
+                       sans_actions={"nombre": 1, "exemples": ["CCC"]})
+    donnees = ecrire([], _bilan_vide(), {}, lecture, DATE_CHOIX).split("## Données")[1]
+    assert "12 titres sans cours" in donnees and "par exemple AAA, BBB" in donnees
+    assert "1 titre sans nombre d'actions" in donnees and "par exemple CCC" in donnees
+
+
+def test_rapport_signale_une_proposition_incomplete():
+    texte = ecrire([], _bilan_vide(), {}, _lecture(), DATE_CHOIX)  # _lecture a une source en échec
+    assert "proposition incomplète" in texte.split("## Liste proposée")[0]
+    complet = ecrire([], _bilan_vide(), {}, {"sources": [{"nom": "Chambre", "etat": "lue", "lues": 1}]}, DATE_CHOIX)
+    assert "incomplète" not in complet
+
+
+def test_totaux_comptent_les_jeux_trimestriels_a_part():
+    from inities.rapport import totaux
+    lecture = {"sources": [{"nom": "Chambre", "etat": "lue", "lues": 90, "illisibles": 10},
+                           {"nom": "Form 4", "etat": "lue", "lues": 11, "illisibles": 1, "a_part": True}]}
+    assert totaux(lecture) == (90, 10)
+
+
 # --- valider ---
 
 def test_valider_copie_la_proposition(tmp_path):
-    proposition = {"date_choix": "2026-10-21",
+    proposition = {"date_choix": "2026-10-21", "complet": True, "sources_en_echec": [],
                    "personnes": [{"personne_id": "fonds:1067983", "personne": "Berkshire Hathaway", "famille": "fonds"}]}
     (tmp_path / "proposition.json").write_text(json.dumps(proposition))
     assert backtest_copie.valider(tmp_path, date(2026, 10, 22)) == 0
     suivis = json.loads((tmp_path / "suivis.json").read_text())
     assert suivis == {"valide_le": "2026-10-22", "personnes": proposition["personnes"]}
+
+
+def test_valider_refuse_une_proposition_incomplete(tmp_path, capsys):
+    proposition = {"date_choix": "2026-10-21", "complet": False, "sources_en_echec": ["13F (fonds)"],
+                   "personnes": [{"personne_id": "x", "personne": "X", "famille": "fonds"}]}
+    (tmp_path / "proposition.json").write_text(json.dumps(proposition))
+    assert backtest_copie.valider(tmp_path, date(2026, 10, 22)) == 1
+    assert not (tmp_path / "suivis.json").exists()
+    sortie = capsys.readouterr().out
+    assert "Validation refusée" in sortie and "incomplète" in sortie and "13F (fonds)" in sortie
+
+
+def test_valider_refuse_une_proposition_sans_indication(tmp_path, capsys):
+    (tmp_path / "proposition.json").write_text(json.dumps({"date_choix": "2026-10-21", "personnes": []}))
+    assert backtest_copie.valider(tmp_path, date(2026, 10, 22)) == 1
+    assert not (tmp_path / "suivis.json").exists()
+    assert "Validation refusée" in capsys.readouterr().out
 
 
 def test_valider_sans_proposition(tmp_path, capsys):
@@ -216,18 +283,32 @@ def test_echec_d_une_source_ne_perd_pas_le_reste(tmp_path, faux, monkeypatch, ca
     def tombe(*a, **k):
         raise ConnectionError("coupure")
     monkeypatch.setattr(fonds, "telecharger", tombe)
-    assert _lancer(tmp_path) == 0
+    assert _lancer(tmp_path) == 1  # tout est écrit, mais le code de sortie dit que la proposition est incomplète
     rapport = (tmp_path / "rapport_copie.md").read_text()
-    assert "échec : ConnectionError: coupure" in rapport
+    assert "échec : ConnectionError: coupure" in rapport and "proposition incomplète" in rapport
     assert "Dupont" in rapport.split("## Liste proposée")[1].split("## Classement complet")[0]
-    assert "échec" in capsys.readouterr().out
+    sortie = capsys.readouterr().out
+    assert "échec" in sortie and "ATTENTION" in sortie and "13F (fonds)" in sortie
+    proposition = json.loads((tmp_path / "copie" / "proposition.json").read_text())
+    assert proposition["complet"] is False and proposition["sources_en_echec"] == ["13F (fonds)"]
+    assert proposition["personnes"]  # la proposition reste lisible, mais ne se valide pas
+    assert backtest_copie.valider(tmp_path / "copie", date(2026, 10, 22)) == 1
+    assert not (tmp_path / "copie" / "suivis.json").exists()
+    assert "Validation refusée" in capsys.readouterr().out
+
+
+def test_sources_toutes_lues_donnent_une_proposition_complete(tmp_path, faux):
+    assert _lancer(tmp_path) == 0
+    proposition = json.loads((tmp_path / "copie" / "proposition.json").read_text())
+    assert proposition["complet"] is True and proposition["sources_en_echec"] == []
+    assert backtest_copie.valider(tmp_path / "copie", date(2026, 10, 22)) == 0
 
 
 def test_sans_contact_sec_les_sources_sec_echouent_seules(tmp_path, faux, monkeypatch):
     def sans_contact(**_):
         raise ErreurSec("SEC_CONTACT manquant")
     monkeypatch.setattr(backtest_copie, "ClientSec", sans_contact)
-    assert _lancer(tmp_path) == 0
+    assert _lancer(tmp_path) == 1  # deux sources en échec : proposition incomplète
     rapport = (tmp_path / "rapport_copie.md").read_text()
     assert rapport.count("échec : ErreurSec: SEC_CONTACT manquant") == 2  # Form 345 et 13F
     assert "Dupont" in rapport
@@ -268,7 +349,7 @@ def test_jeux_form345_du_premier_trimestre_au_dernier_publie(tmp_path, faux, mon
     assert "échec" not in ligne and "11 jeux trimestriels lus, 0 illisible" in ligne
 
 
-def test_trimestre_illisible_ne_perd_pas_les_autres(tmp_path, faux, monkeypatch):
+def test_trimestre_illisible_ne_perd_pas_les_autres(tmp_path, faux, monkeypatch, capsys):
     class Client(FauxClient):
         def octets(self, url, cache=False):
             return b"zip"
@@ -286,19 +367,95 @@ def test_trimestre_illisible_ne_perd_pas_les_autres(tmp_path, faux, monkeypatch)
     rapport = (tmp_path / "rapport_copie.md").read_text()
     assert "11 jeux trimestriels lus, 1 illisible (8,3 %)" in rapport
     assert "2024T2 : ErreurDirigeants: jeu trimestriel : zip invalide" in rapport
+    # le jeu illisible n'entre pas dans la part de PDF illisibles
+    assert "Au total (déclarations en PDF, hors jeux trimestriels) : 90 lues, 10 illisibles (10,0 %)" in rapport
+    assert "Résumé : 90 lues, 10 illisibles (10,0 %)" in capsys.readouterr().out
+
+
+def _remplir_cache(tmp_path, tickers, actions=None):
+    """Écrit dans donnees/cours/ ce que cours.charger et cours.actions_en_circulation y auraient gardé."""
+    dossier = tmp_path / "donnees" / "cours"
+    dossier.mkdir(parents=True, exist_ok=True)
+    for ticker, df in _cours_faux(tickers, None, None, None).items():
+        pd.to_pickle({"debut": backtest_copie.DEBUT_COURS, "fin": DATE_CHOIX, "cours": df},
+                     module_cours._fichier(dossier, ticker))
+    (dossier / "actions.json").write_text(json.dumps(actions if actions is not None else {t: 1e9 for t in tickers}))
+
+
+def _interdire_le_reseau(monkeypatch):
+    def interdit(*a, **k):
+        pytest.fail("aucun accès au réseau attendu")
+    for module, nom in ((chambre, "telecharger"), (fonds, "telecharger"), (module_cours, "charger"),
+                        (module_cours, "actions_en_circulation"), (module_cours, "_telecharger"),
+                        (module_cours, "_actions"), (backtest_copie, "ClientSec")):
+        monkeypatch.setattr(module, nom, interdit)
 
 
 def test_sans_telechargement_relit_les_operations(tmp_path, faux, monkeypatch):
     _lancer(tmp_path)
     premier = (tmp_path / "rapport_copie.md").read_text()
-
-    def interdit(*a, **k):
-        pytest.fail("aucun téléchargement attendu")
-    monkeypatch.setattr(chambre, "telecharger", interdit)
-    monkeypatch.setattr(fonds, "telecharger", interdit)
-    monkeypatch.setattr(backtest_copie, "ClientSec", interdit)
+    _remplir_cache(tmp_path, ["QQQ", "EURUSD=X", "AAA"])
+    _interdire_le_reseau(monkeypatch)
     assert _lancer(tmp_path, sans_telechargement=True) == 0
     assert (tmp_path / "rapport_copie.md").read_text() == premier
+
+
+def test_sans_telechargement_compte_les_titres_absents_du_cache(tmp_path, faux, monkeypatch, capsys):
+    _lancer(tmp_path)
+    _remplir_cache(tmp_path, ["QQQ", "EURUSD=X"])  # AAA n'est pas en cache
+    _interdire_le_reseau(monkeypatch)
+    assert _lancer(tmp_path, sans_telechargement=True) == 0
+    donnees = (tmp_path / "rapport_copie.md").read_text().split("## Données")[1]
+    assert "1 titre sans cours" in donnees and "par exemple AAA" in donnees
+    assert "Dupont" not in (tmp_path / "rapport_copie.md").read_text().split("## Classement complet")[0].split(
+        "## Liste proposée")[1]
+    assert "Titres : 1 sans cours (par exemple AAA)" in capsys.readouterr().out
+
+
+def test_sans_telechargement_sans_cours_de_qqq(tmp_path, faux, monkeypatch, capsys):
+    _lancer(tmp_path)
+    _interdire_le_reseau(monkeypatch)  # cache de cours vide
+    assert _lancer(tmp_path, sans_telechargement=True) == 1
+    assert "QQQ introuvables" in capsys.readouterr().out
+
+
+def test_titres_sans_cours_et_sans_actions_sont_comptes(tmp_path, faux, monkeypatch, capsys):
+    ops = _achats_gagnants() + [_op("ZZZ", date(2026, 1, 5), "politicien:chambre:Martin|Paul|NY-01"),
+                                _op("BBB", date(2026, 1, 6), "politicien:chambre:Martin|Paul|NY-01")]
+    monkeypatch.setattr(chambre, "telecharger", lambda annees, dossier, session=None: (ops, 90, 10))
+    monkeypatch.setattr(module_cours, "charger",
+                        lambda tickers, debut, fin, dossier: {t: df for t, df in _cours_faux(
+                            tickers, debut, fin, dossier).items() if t != "ZZZ"})
+    monkeypatch.setattr(module_cours, "actions_en_circulation",
+                        lambda tickers, dossier: {t: 1e9 for t in tickers if t != "BBB"})
+    assert _lancer(tmp_path) == 0
+    donnees = (tmp_path / "rapport_copie.md").read_text().split("## Données")[1]
+    assert "1 titre sans cours" in donnees and "par exemple ZZZ" in donnees
+    assert "1 titre sans nombre d'actions" in donnees and "par exemple BBB" in donnees
+    sortie = capsys.readouterr().out
+    assert "Titres : 1 sans cours (par exemple ZZZ) ; 1 sans nombre d'actions (par exemple BBB)" in sortie
+    assert sortie.rstrip().splitlines().count("Titres : 1 sans cours (par exemple ZZZ) ; 1 sans nombre d'actions "
+                                              "(par exemple BBB).") == 1  # aussi dans le résumé final
+
+
+def test_jeux_trimestriels_filtres_un_par_un(tmp_path, faux, monkeypatch):
+    achat = _op("AAA", date(2025, 2, 5), "dirigeant:1", "dirigeant", code="P", dirigeant=True, montant=200_000.0)
+    petit = _op("BBB", date(2025, 2, 5), "dirigeant:2", "dirigeant", code="P", dirigeant=True, montant=5_000.0)
+    vente_autre = _op("CCC", date(2025, 2, 6), "dirigeant:9", "dirigeant", sens="vente", code="S", dirigeant=True)
+    vente_liee = _op("AAA", date(2025, 5, 6), "dirigeant:1", "dirigeant", sens="vente", code="S", dirigeant=True)
+    jeux = iter([[achat, petit, vente_autre], [vente_liee]])
+
+    class Client(FauxClient):
+        def octets(self, url, cache=False):
+            return b"zip" if "2024q1" in url or "2024q2" in url else None
+    monkeypatch.setattr(backtest_copie, "ClientSec", Client)
+    monkeypatch.setattr(dirigeants, "lire_jeu", lambda octets: next(jeux))
+    _lancer(tmp_path)
+    gardees = json.loads((tmp_path / "donnees" / "operations.json").read_text())
+    assert {(d["ticker"], d["sens"]) for d in gardees if d["famille"] == "dirigeant"} == {("AAA", "achat"),
+                                                                                         ("AAA", "vente")}
+    rapport = (tmp_path / "rapport_copie.md").read_text()
+    assert "avant filtre : 4 opérations" in rapport
 
 
 def test_sans_telechargement_sans_donnees(tmp_path, faux, capsys):
