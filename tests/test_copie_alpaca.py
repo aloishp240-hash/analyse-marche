@@ -514,3 +514,10 @@ def test_pas_de_rachat_le_jour_d_une_sortie():
     assert client.appels_de("fermer_position") and client.appels_de("passer_oto") == []
     assert [(op.source_id, motif) for op, motif in signales] == [("chambre:8:1", "titre sorti aujourd'hui")]
     assert charger_etat()["positions"] == []
+
+
+def test_jambe_annulee_n_ecrase_pas_le_stop_repose():
+    client, etat = client_avec_position(id_stop="restop-1", stop_recale=True)
+    client.ordres_par_id["ordre-1"]["legs"][0]["status"] = "canceled"
+    etat, _ = rapprocher(etat, client, P)
+    assert etat["positions"][0]["id_stop"] == "restop-1"

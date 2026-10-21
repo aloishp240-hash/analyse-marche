@@ -3,8 +3,9 @@
 Le code seul décide : Claude ne fixe ni prix ni quantité, ne touche à aucun stop et ne décide d'aucune vente.
 L'état (`copie/positions.json`) ne contient que des identifiants et des dates ; les messages ne citent que le ticker.
 Les fonctions modifient l'état qu'on leur passe, au fil des ordres, puis le renvoient : si une exception les
-interrompt, `copier` enregistre quand même ce qui a déjà été fait. Au moindre écart avec le compte, ou quand Alpaca refuse un ordre, `copie/suspension.json` est écrit : plus aucun
-ordre n'est passé tant que l'utilisateur ne l'a pas supprimé (le rapprochement continue).
+interrompt, `copier` enregistre quand même ce qui a déjà été fait. Au moindre écart avec le compte, ou quand
+Alpaca refuse un ordre, `copie/suspension.json` est écrit : plus aucun ordre n'est passé tant que l'utilisateur ne
+l'a pas supprimé (le rapprochement continue).
 """
 import hashlib
 import json
@@ -116,7 +117,7 @@ def rapprocher(etat, client, p=None, aujourd_hui=None):
             etat["positions"].remove(position)
             messages.append(f"Stop exécuté sur {ticker} : position fermée.")
         else:
-            if jambe.get("status") != "replaced":
+            if jambe.get("status") not in ("replaced", "canceled"):
                 position["id_stop"] = jambe.get("id") or position["id_stop"]
             statut = ordre.get("status")
             if statut in _ECHECS:
@@ -165,7 +166,7 @@ def sorties(etat, ventes, aujourd_hui, client):
         raison = _raison_sortie(position, ventes, aujourd_hui)
         if raison is None:
             continue
-        ticker, stop_annule, execute = position["ticker"], False, True
+        ticker, stop_annule, parent_annule, execute = position["ticker"], False, False, True
         try:
             execute = client.ordre(position["id_ordre"]).get("status") == "filled"
             if execute:
@@ -174,6 +175,7 @@ def sorties(etat, ventes, aujourd_hui, client):
                     stop_annule = True
             else:
                 client.annuler(position["id_ordre"])
+                parent_annule = True
             ordre = None
             if execute or ticker in {pos["symbol"] for pos in client.positions()}:
                 ordre = client.fermer_position(ticker)
@@ -182,6 +184,9 @@ def sorties(etat, ventes, aujourd_hui, client):
                 suite = (" ; son stop a été annulé puis reposé" if _reposer_stop(position, client)
                          else " ; son stop a été annulé et n'a pas pu être reposé (non reposé), la position n'est "
                               "plus protégée")
+            elif parent_annule:
+                suite = (" ; l'achat a été annulé, mais les actions déjà achetées éventuelles n'ont plus de stop "
+                         "(non reposé)")
             else:
                 suite = ""
             messages += _suspendre(f"sortie de {ticker} impossible ({str(erreur)[:200]}){suite}", aujourd_hui)
