@@ -3,8 +3,11 @@ import zipfile
 from datetime import date
 from pathlib import Path
 
+import pytest
+import requests
+
 from inities import chambre
-from inities.chambre import lire_declaration, lire_index, telecharger
+from inities.chambre import ErreurChambre, lire_declaration, lire_index, telecharger
 from tests.faux_http import Reponse, Session
 
 DONNEES = Path(__file__).parent / "donnees" / "copie"
@@ -49,11 +52,13 @@ def test_ventes_partielles_et_autres_types(monkeypatch):
     texte = ("JT Alpha Corp (ABC) [ST]\nS (partial) 01/05/2026 01/07/2026 $1,001 -\n$15,000\n"
              "F S: New\nJT Beta Corp (BR.B) [ST]\nE 01/05/2026 01/07/2026 $1,001 - $15,000\nF S: New\n"
              "DC Gamma Corp (GAM) [ST]\nP 02/05/2026 02/07/2026 $15,001 - $50,000\nF S: New\n"
+             "JT Berkshire Hathaway Inc. (BRK-B) [ST]\nP 03/05/2026 03/07/2026 $1,001 - $15,000\nF S: New\n"
              "Obligation Delta (DEL) [GS]\nP 02/05/2026 02/07/2026 $15,001 - $50,000\n")
     monkeypatch.setattr(chambre, "_texte_pdf", lambda pdf: texte)
     ops = lire_declaration(b"x", ENTREE_JACKSON)
     assert [(o.ticker, o.sens, o.date_operation, o.details["proprietaire"]) for o in ops] == [
-        ("ABC", "vente", date(2026, 1, 5), "JT"), ("GAM", "achat", date(2026, 2, 5), "DC")]
+        ("ABC", "vente", date(2026, 1, 5), "JT"), ("GAM", "achat", date(2026, 2, 5), "DC"),
+        ("BRK-B", "achat", date(2026, 3, 5), "JT")]
 
 
 def _zip_index():
@@ -84,3 +89,50 @@ def test_telecharger_compte_les_illisibles(tmp_path):
     assert telecharger([2026], tmp_path, session=session) == ([], 0, 1)
     session = Session(Reponse(octets=_zip_index()), Reponse(code=404))
     assert telecharger([2026], tmp_path / "autre", session=session) == ([], 0, 1)
+
+
+def test_telecharger_continue_apres_une_erreur_reseau(tmp_path):
+    xml = (DONNEES / "chambre-index.xml").read_bytes().replace(b"</FinancialDisclosure>", b"""
+  <Member><Last>Autre</Last><First>Anne</First><FilingType>P</FilingType><StateDst>TX01</StateDst>
+    <Year>2026</Year><FilingDate>10/20/2026</FilingDate><DocID>20035552</DocID></Member>
+</FinancialDisclosure>""")
+    tampon = io.BytesIO()
+    with zipfile.ZipFile(tampon, "w") as z:
+        z.writestr("2026FD.xml", xml)
+    pdf = (DONNEES / "chambre-20035551.pdf").read_bytes()
+
+    class SessionCapricieuse:
+        def request(self, methode, url, **options):
+            if url.endswith("FD.zip"):
+                return Reponse(octets=tampon.getvalue())
+            if url.endswith("/20035551.pdf"):
+                return Reponse(octets=pdf)
+            raise requests.ConnectionError("coupure")
+
+    ops, lues, illisibles = telecharger([2026], tmp_path, session=SessionCapricieuse())
+    assert (lues, illisibles) == (1, 1)
+    assert len(ops) == 6 and {o.source_id.split(":")[1] for o in ops} == {"20035551"}
+
+
+def test_telecharger_attrape_toute_erreur_de_lecture_pdf(tmp_path, monkeypatch):
+    monkeypatch.setattr(chambre, "_texte_pdf", lambda pdf: (_ for _ in ()).throw(RecursionError("pdf piégé")))
+    session = Session(Reponse(octets=_zip_index()), Reponse(octets=b"%PDF"))
+    assert telecharger([2026], tmp_path, session=session) == ([], 0, 1)
+
+
+def test_index_invalide_leve_une_erreur_claire(tmp_path):
+    with pytest.raises(ErreurChambre, match="zip"):
+        telecharger([2026], tmp_path, session=Session(Reponse(octets=b"pas un zip")))
+    tampon = io.BytesIO()
+    with zipfile.ZipFile(tampon, "w") as z:
+        z.writestr("2026FD.txt", "sans xml")
+    with pytest.raises(ErreurChambre, match="XML"):
+        telecharger([2026], tmp_path, session=Session(Reponse(octets=tampon.getvalue())))
+    with pytest.raises(ErreurChambre, match="XML"):
+        lire_index(b"<pas du xml")
+
+
+def test_membre_sans_date_ignore():
+    xml = (b"<FinancialDisclosure><Member><Last>A</Last><First>B</First><FilingType>P</FilingType>"
+           b"<StateDst>TX01</StateDst><Year>2026</Year><DocID>1</DocID></Member></FinancialDisclosure>")
+    assert lire_index(xml) == []

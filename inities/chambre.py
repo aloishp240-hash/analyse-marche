@@ -22,7 +22,7 @@ DELAI = 30  # secondes
 
 # Le texte de pypdf coupe les lignes à l'intérieur d'une transaction : on travaille sur des blocs recollés.
 _TRANSACTION = re.compile(
-    r"\((?P<ticker>[A-Z.]{1,6})\)\s*\[ST\]\s*(?P<type>P|S(?: \(partial\))?)\s+(?P<date>\d\d/\d\d/\d{4})"
+    r"\((?P<ticker>[A-Z][A-Z0-9.\-]{0,9})\)\s*\[ST\]\s*(?P<type>P|S(?: \(partial\))?)\s+(?P<date>\d\d/\d\d/\d{4})"
     r"\s+\d\d/\d\d/\d{4}\s+\$(?P<min>[\d,]+)\s*-\s*\$(?P<max>[\d,]+)")
 _SEPARATEUR = re.compile(r"^F\s+S\s*:", re.MULTILINE)  # « Filing Status : », en petites capitales
 _PROPRIETAIRE = re.compile(r"(?:^|\n)(SP|DC|JT)\s+\S")
@@ -37,18 +37,29 @@ def _entier(texte):
 
 
 def lire_index(xml):
-    """Déclarations de transactions (FilingType P) de l'index annuel."""
+    """Déclarations de transactions (FilingType P) de l'index annuel ; un membre sans date ou sans numéro est ignoré."""
+    try:
+        racine = ElementTree.fromstring(xml)
+    except ElementTree.ParseError as erreur:
+        raise ErreurChambre(f"index de la Chambre : XML illisible ({erreur})") from erreur
     entrees = []
-    for membre in ElementTree.fromstring(xml).iter("Member"):
+    for membre in racine.iter("Member"):
         if (membre.findtext("FilingType") or "").strip() != "P":
             continue
-        publication = datetime.strptime(membre.findtext("FilingDate").strip(), "%m/%d/%Y").date()
+        try:
+            publication = datetime.strptime((membre.findtext("FilingDate") or "").strip(), "%m/%d/%Y").date()
+            annee = int(membre.findtext("Year"))
+        except (ValueError, TypeError):
+            continue
+        doc_id = (membre.findtext("DocID") or "").strip()
+        if not doc_id:
+            continue
         entrees.append({
-            "doc_id": membre.findtext("DocID").strip(),
+            "doc_id": doc_id,
             "nom": (membre.findtext("Last") or "").strip(),
             "prenom": (membre.findtext("First") or "").strip(),
             "etat": (membre.findtext("StateDst") or "").strip(),
-            "annee": int(membre.findtext("Year")),
+            "annee": annee,
             "date_publication": publication,
         })
     return entrees
@@ -91,9 +102,14 @@ def _index_annuel(session, annee):
     reponse = _lire(session, URL_INDEX.format(annee=annee))
     if reponse.status_code != 200:
         raise ErreurChambre(f"index {annee} de la Chambre indisponible (code {reponse.status_code})")
-    with zipfile.ZipFile(io.BytesIO(reponse.content)) as archive:
-        nom = next(n for n in archive.namelist() if n.lower().endswith(".xml"))
-        return lire_index(archive.read(nom))
+    try:
+        with zipfile.ZipFile(io.BytesIO(reponse.content)) as archive:
+            nom = next((n for n in archive.namelist() if n.lower().endswith(".xml")), None)
+            if nom is None:
+                raise ErreurChambre(f"index {annee} de la Chambre : aucun fichier XML dans le zip")
+            return lire_index(archive.read(nom))
+    except zipfile.BadZipFile as erreur:
+        raise ErreurChambre(f"index {annee} de la Chambre : zip invalide") from erreur
 
 
 def _pdf(session, entree, dossier):
@@ -116,8 +132,11 @@ def telecharger(annees, dossier, session=None):
     operations, lues, illisibles = [], 0, 0
     for annee in annees:
         for entree in _index_annuel(session, annee):
-            pdf = _pdf(session, entree, dossier)
-            lues_ici = lire_declaration(pdf, entree) if pdf is not None else None
+            try:
+                pdf = _pdf(session, entree, dossier)
+                lues_ici = lire_declaration(pdf, entree) if pdf is not None else None
+            except Exception:  # une mauvaise déclaration ne doit jamais arrêter le lot quotidien
+                lues_ici = None
             if lues_ici is None:
                 illisibles += 1
                 continue
