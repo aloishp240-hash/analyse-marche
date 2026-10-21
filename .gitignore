@@ -8,3 +8,4 @@ agent/en-attente.json
 agent/a-envoyer.json
 agent/.passage.verrou
 personnel/
+!tests/donnees/
