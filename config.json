@@ -42,5 +42,14 @@
     "remontee_stop_atr": 1.5,
     "validite_ordre_seances": 3,
     "stop_temporel_seances": 15
+  },
+  "momentum": {
+    "capital_initial": 3000,
+    "titres": 5,
+    "mois_perf": 12,
+    "mois_exclus": 1,
+    "filtre_mm": 200,
+    "frais_fixe_eur": 1,
+    "frais_pct": 0.1
   }
 }

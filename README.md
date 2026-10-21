@@ -27,9 +27,10 @@ Signaux d'entrée, d'objectif et de stop sur un portefeuille **fictif** de 3 000
 
 - `positions.py` : simule les exécutions des ordres et positions fictifs toutes les 5 min, envoie les entrées et sorties sur Telegram, et le bilan du vendredi après 16h15 New York.
 - `agent.py` : après 16h45 New York, repère les candidats de la stratégie (`court_terme/`), puis lance `claude -p` avec la consigne `agent/consigne.md` et le skill `.claude/skills/analyse-court-terme`. Claude n'a accès qu'aux scripts de `outils/` (actualités, engouement ApeWisdom, Reddit, paris Polymarket, notes, signal, fermer, info), à `fiche.py` et à la recherche web. Deux échecs dans la journée : pas de signal ce jour-là, et un message Telegram le dit.
+- `momentum.py` : second portefeuille fictif en rotation momentum mensuelle (Top 5 du Nasdaq 100 sur 12 mois hors dernier mois, filtre QQQ > moyenne 200 jours), décision après la clôture du dernier jour ouvré du mois et exécution à l'ouverture suivante, avec messages Telegram (section 11 de la stratégie).
 - `backtest.py` : rejoue la stratégie sans Claude sur l'historique (`.venv/bin/python backtest.py`).
 
-L'état vit dans `agent/` (`positions.json`, `notes.md`, `sessions/AAAA-MM-JJ.md` pour les verdicts, `sessions/AAAA-MM-JJ-journal.md` pour chaque recherche et outil appelé par Claude, avec un extrait de la réponse) et le workflow `.github/workflows/court-terme.yml` le commite sur `main` : faire `git pull` avant de travailler sur le Mac.
+L'état vit dans `agent/` (`positions.json`, `momentum.json`, `notes.md`, `sessions/AAAA-MM-JJ.md` pour les verdicts, `sessions/AAAA-MM-JJ-journal.md` pour chaque recherche et outil appelé par Claude, avec un extrait de la réponse) et le workflow `.github/workflows/court-terme.yml` le commite sur `main` : faire `git pull` avant de travailler sur le Mac.
 
 Configuration : secrets `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`), `TELEGRAM_TOKEN` et `TELEGRAM_CHAT_ID`. Pour Reddit (facultatif), créer une application de type « script » sur reddit.com/prefs/apps, puis :
 
@@ -40,4 +41,5 @@ Commandes utiles :
 
     .venv/bin/python positions.py --dry-run          # messages sans envoi ni sauvegarde
     .venv/bin/python agent.py --force --dry-run      # candidats et consigne, sans appeler Claude
+    .venv/bin/python momentum.py --force --dry-run   # décision momentum sur la dernière séance, sans envoi
     gh workflow run court-terme.yml                  # même test sur GitHub

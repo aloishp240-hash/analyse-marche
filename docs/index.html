@@ -80,6 +80,7 @@ tr:last-child td { border-bottom: 0; }
     <span id="maj">chargement…</span></div>
   <nav id="nav">
     <button data-onglet="portefeuille" class="actif">Portefeuille</button>
+    <button data-onglet="momentum">Momentum</button>
     <button data-onglet="candidats">Candidats du jour</button>
     <button data-onglet="sessions">Sessions de Claude</button>
     <button data-onglet="notes">Notes de Claude</button>
@@ -90,6 +91,7 @@ tr:last-child td { border-bottom: 0; }
 </header>
 <main>
   <section id="portefeuille"></section>
+  <section id="momentum" hidden></section>
   <section id="candidats" hidden></section>
   <section id="sessions" hidden>
     <div class="sessions">
@@ -188,6 +190,52 @@ function rendrePortefeuille(etat, config) {
   $("portefeuille").innerHTML = h;
 }
 
+function courbe(historique, capital) {
+  if (historique.length < 2) return "";
+  const pts = historique.map(h => [(h.valeur_eur / capital - 1) * 100, h.qqq_pct]);
+  const vals = pts.flat(), min = Math.min(0, ...vals), max = Math.max(0, ...vals), l = 600, H = 160;
+  const x = i => i / (pts.length - 1) * l, y = v => H - (v - min) / (max - min || 1) * H;
+  const ligne = (k, c) => `<polyline fill="none" stroke="var(${c})" stroke-width="2" points="${pts.map((p, i) => `${x(i)},${y(p[k])}`).join(" ")}"/>`;
+  return `<svg viewBox="0 0 ${l} ${H}" style="width:100%;height:auto;margin-bottom:6px" role="img" aria-label="Momentum contre QQQ">
+    <line x1="0" x2="${l}" y1="${y(0)}" y2="${y(0)}" stroke="var(--bord)"/>${ligne(1, "--doux")}${ligne(0, "--accent")}</svg>
+    <div class="sous-titre"><b style="color:var(--accent)">Momentum</b> contre <b style="color:var(--doux)">QQQ</b>, en % depuis le premier achat.</div>`;
+}
+
+function rendreMomentum(etat) {
+  if (!etat) { $("momentum").innerHTML = `<p class="vide">Pas encore démarré : première décision à la fin du mois.</p>`; return; }
+  const dernier = etat.historique.at(-1);
+  const valeur = dernier?.valeur_eur ?? etat.capital_initial, perf = (valeur / etat.capital_initial - 1) * 100;
+  const pct = x => `${x >= 0 ? "+" : ""}${x.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %`;
+  let h = `<p class="sous-titre">Second portefeuille <b>fictif</b> : chaque fin de mois, les 5 titres du Nasdaq 100 les plus forts sur
+    12 mois (hors dernier mois), si QQQ est au-dessus de sa moyenne 200 jours ; sinon tout en liquidités. Exécution à l'ouverture
+    suivante, frais compris (1 € + 0,1 % par ordre). Aucun rôle pour Claude.</p>
+  <div class="chiffres">
+    <div class="chiffre"><div class="libelle">Valeur${dernier ? ` au ${date(dernier.date)}` : ""}</div><div class="valeur">${valeur.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €</div></div>
+    <div class="chiffre"><div class="libelle">Performance</div><div class="valeur ${perf >= 0 ? "vert" : "rouge"}">${pct(perf)}</div></div>
+    <div class="chiffre"><div class="libelle">QQQ même période</div><div class="valeur">${pct(dernier?.qqq_pct ?? 0)}</div></div>
+    <div class="chiffre"><div class="libelle">Liquidités</div><div class="valeur">${etat.liquidites_eur.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €</div></div>
+    <div class="chiffre"><div class="libelle">Frais payés</div><div class="valeur">${etat.operations.reduce((s, o) => s + o.frais_eur, 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} €</div></div>
+  </div>${courbe(etat.historique, etat.capital_initial)}`;
+  const d = etat.decision;
+  if (d) h += `<h2>Rotation décidée le ${date(d.date)}, exécutée à la prochaine ouverture</h2><div class="carte"><div class="niveaux">
+      ${d.ventes.length ? `<span>À vendre <b class="rouge">${d.ventes.map(esc).join(", ")}</b></span>` : ""}
+      ${d.achats.length ? `<span>À acheter <b class="vert">${d.achats.map(esc).join(", ")}</b></span>` : ""}
+      ${d.conserves.length ? `<span>Conservés <b>${d.conserves.map(esc).join(", ")}</b></span>` : ""}</div></div>`;
+  h += `<h2>Lignes détenues</h2>`;
+  h += etat.lignes.length ? `<div class="tableau"><table><thead><tr><th>Titre</th><th>Achat</th><th>Quantité</th><th>Prix achat</th>
+      <th>Montant</th></tr></thead><tbody>${etat.lignes.map(l => `<tr><td>${titre(l)}</td><td>${date(l.date_entree)}</td>
+      <td>${l.quantite}</td><td>${usd(l.prix_entree)}</td><td>${l.cout_eur.toLocaleString("fr-FR")} €</td></tr>`).join("")}</tbody></table></div>`
+    : `<p class="vide">Aucune ligne : ${etat.debut ? "tout est en liquidités (QQQ sous sa moyenne 200 jours)" : "en attente de la première fin de mois"}.</p>`;
+  h += `<h2>Opérations</h2>`;
+  h += etat.operations.length ? `<div class="tableau"><table><thead><tr><th>Date</th><th>Sens</th><th>Titre</th><th>Quantité</th>
+      <th>Prix</th><th>Montant</th><th>Frais</th><th>Résultat</th></tr></thead><tbody>
+      ${[...etat.operations].reverse().map(o => `<tr><td>${date(o.date)}</td><td>${o.type}</td><td>${titre(o)}</td><td>${o.quantite}</td>
+        <td>${usd(o.prix)}</td><td>${o.montant_eur.toLocaleString("fr-FR")} €</td><td>${o.frais_eur.toLocaleString("fr-FR")} €</td>
+        <td class="${(o.resultat_eur ?? 0) >= 0 ? "vert" : "rouge"}">${o.resultat_eur == null ? "" : eur(o.resultat_eur)}</td></tr>`).join("")}
+      </tbody></table></div>` : `<p class="vide">Aucune opération pour l'instant.</p>`;
+  $("momentum").innerHTML = h;
+}
+
 function rendreCandidats(donnees) {
   const liste = donnees?.candidats || [];
   let h = `<p class="sous-titre">Titres repérés par le code le ${date(donnees?.jour)} et transmis à Claude, qui les valide ou les rejette
@@ -268,6 +316,7 @@ async function etape(id, fn) {
   await etape("reglages", async () => { config = (await lire("config.json", true)).court_terme; rendreReglages(config); });
   await Promise.all([
     etape("portefeuille", async () => rendrePortefeuille(await lire("agent/positions.json", true), config)),
+    etape("momentum", async () => rendreMomentum(await lire("agent/momentum.json", true))),
     etape("candidats", async () => rendreCandidats(await lire("agent/candidats-du-jour.json", true))),
     etape("session", chargerSessions),
     etape("notes", async () => {
