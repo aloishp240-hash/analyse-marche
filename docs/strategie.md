@@ -36,6 +36,9 @@ Le tout tourne sur GitHub Actions toutes les 5 minutes, du lundi au vendredi.
 | Titres d'une même industrie | 2 au maximum | `par_industrie_max` |
 | Montant total engagé | jamais plus que le capital courant | — |
 
+Avec des positions de 40 % au plus, le capital bloque en pratique avant le nombre de titres : 2 à 3 positions
+pleines à la fois.
+
 Les titres sont cotés en dollars ; le portefeuille est compté en euros au taux EUR/USD de la dernière clôture.
 
 ---
@@ -107,11 +110,15 @@ Le gain visé vaut donc **2 fois le risque** (3 ATR contre 1,5 ATR).
 
 Le code prend le plus petit de ces deux nombres, arrondi au centième d'action inférieur (`decimales_quantite`) :
 
-1. le nombre d'actions qui fait perdre **1 % du capital** (30 €) si le stop est touché (`risque_pct`) ;
-2. le nombre d'actions qui tient dans **20 % du capital** (600 €) (`plafond_position_pct`).
+1. le nombre d'actions qui fait perdre **2 % du capital** (60 €) si le stop est touché (`risque_pct`) ;
+2. le nombre d'actions qui tient dans **40 % du capital** (1 200 €) (`plafond_position_pct`).
 
-Dans l'exemple : 4,32 actions pour 30 € de risque, mais 3,55 actions pour 600 €. Retenu : **3,55 actions**, soit un
-risque réel d'environ 25 €. Pour la plupart des titres, c'est le plafond de 600 € qui décide.
+Dans l'exemple : 8 actions pour 60 € de risque, mais 6,57 actions pour 1 200 €. Retenu : **6,57 actions**, soit un
+risque réel d'environ 49 €. Pour la plupart des titres, c'est le plafond de 1 200 € qui décide.
+
+Ces deux réglages valaient 1 % et 20 % au départ. Le backtest sur 3 ans avec frais (1 € + 0,1 % par ordre) les a
+fait doubler : avec 600 € par trade, les frais mangeaient tout l'avantage (−6,5 % sur 3 ans) ; avec 1 200 €, ils
+pèsent moitié moins (+19 %, positif chaque année, mais baisse maximale de −23,5 %).
 
 ---
 
@@ -196,8 +203,8 @@ Chaque événement envoie un message Telegram avec le résultat en euros.
 
 ## 9. Limites connues, à garder en tête
 
-- **Pas de frais** : la simulation ignore les frais de courtage et de change. Sur des ordres de 600 €, ils peuvent
-  peser.
+- **Pas de frais** : la simulation ignore les frais de courtage et de change. Sur des ordres de 1 200 €,
+  ils coûtent environ 4,4 € par aller-retour (1 € + 0,1 % par ordre).
 - **Exécution idéale** : la simulation achète exactement au prix visé et vend exactement au stop. En vrai, tu peux
   acheter plus haut dans la zone, et un stop peut être exécuté un peu plus bas (glissement).
 - **Résultats pendant le trade** : un titre n'est pas acheté à moins de 10 séances de ses résultats, mais une position
@@ -212,7 +219,7 @@ Chaque événement envoie un message Telegram avec le résultat en euros.
 | Question | Réglage actuel |
 |---|---|
 | Activer les cassures en plus des replis ? | `configurations.B` = false |
-| Prendre plus ou moins de risque par trade ? | 1 % du capital, 600 € max par position |
+| Prendre plus ou moins de risque par trade ? | 2 % du capital, 1 200 € max par position |
 | Plus de titres en même temps ? | 5 titres, 2 par industrie |
 | Objectif plus proche (plus souvent atteint) ou plus loin (gains plus gros) ? | 3 ATR, soit 2 fois le risque |
 | Garder les positions plus ou moins longtemps ? | 15 séances |

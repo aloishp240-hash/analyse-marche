@@ -27,8 +27,8 @@ def capital_courant(etat):
 
 
 def quantite(entree, stop, capital_eur, taux_eurusd, p):
-    """Actions, fractions comprises (arrondi inférieur à decimales_quantite) : 1 % de risque jusqu'au stop,
-    sans dépasser 20 % du capital."""
+    """Actions, fractions comprises (arrondi inférieur à decimales_quantite) : risque_pct du capital jusqu'au stop,
+    sans dépasser plafond_position_pct du capital."""
     risque_usd = capital_eur * p["risque_pct"] / 100 * taux_eurusd
     plafond_usd = capital_eur * p["plafond_position_pct"] / 100 * taux_eurusd
     echelle = 10 ** p["decimales_quantite"]
