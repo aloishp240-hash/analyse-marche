@@ -75,18 +75,26 @@ fin : candidats rejetés et pourquoi, titres à surveiller, leçon tirée d'une 
 
 ### Signal — `python outils/signal.py TICKER "justification"`
 Valide un candidat : le code calcule l'ordre fictif et le met en attente avec ta justification, envoyée telle
-quelle sur Telegram sous « Pourquoi Claude achète ». Elle doit expliquer ta décision à quelqu'un qui n'a pas suivi la
-session, en français, avec ces quatre rubriques dans cet ordre (chacune 1 à 2 phrases, avec des faits précis) :
+quelle sur Telegram sous « Pourquoi Claude achète ». Le lecteur débute en bourse : il doit comprendre vraiment
+pourquoi on achète. Écris en français, avec des mots simples et des phrases courtes ; chaque chiffre ou mot technique
+(RSI, moyenne mobile, ATR, force relative, QQQ) est suivi de ce qu'il veut dire concrètement. Quatre rubriques dans
+cet ordre, chacune 2 à 3 phrases avec des faits précis :
 
-- `Technique :` la configuration et ce qui la rend propre (RSI, force relative contre QQQ, distance au stop) ;
-- `Actualités :` ce que tu as lu et pourquoi ce n'est pas un couteau qui tombe (ou le catalyseur d'une cassure) ;
-- `Contexte :` secteur, résultats à venir, engouement, Polymarket — ce que tu as vérifié en plus ;
-- `Risque :` ce qui invaliderait le trade.
+- `Technique :` ce que fait le cours (monté, puis petit recul vers un niveau où il rebondit souvent) et pourquoi c'est
+  un bon moment pour acheter ;
+- `Actualités :` ce que tu as lu, et pourquoi la baisse ne vient pas d'une mauvaise nouvelle sur la société (ou ce
+  qui explique la cassure) ;
+- `Contexte :` le marché et le secteur, la date des prochains résultats, ce que tu as vérifié en plus ;
+- `Risque :` ce qui pourrait mal tourner, et ce qui se passe alors (le stop vend automatiquement, perte limitée).
 
-Exemple : `python outils/signal.py NVDA "Technique : repli de 6 % vers la moyenne 50 jours, RSI 41, force relative
-+12 pts contre QQQ. Actualités : baisse liée à des prises de bénéfices sur le secteur, aucune nouvelle négative sur
-NVIDIA. Contexte : résultats dans 5 semaines, engouement stable sur Reddit. Risque : une nouvelle restriction
-d'exportation vers la Chine."`
+Exemple : `python outils/signal.py NVDA "Technique : NVIDIA monte depuis des mois et a reculé de 6 % ces derniers
+jours, jusqu'à sa moyenne des 50 dernières séances, un niveau où le cours rebondit souvent. Son RSI est à 41 : le
+titre a assez baissé pour être moins cher, sans s'effondrer. Sur 3 mois, il a fait 12 points de mieux que le Nasdaq
+(QQQ) : les acheteurs restent présents. Actualités : la baisse vient de ventes sur tout le secteur des puces après
+une forte hausse ; aucune mauvaise nouvelle sur NVIDIA elle-même. Contexte : le marché reste orienté à la hausse et
+les résultats ne sortent que dans 5 semaines, après la fin prévue du trade. Risque : une nouvelle interdiction de
+vendre des puces à la Chine ferait chuter le titre ; dans ce cas le stop vend automatiquement et la perte reste
+limitée à environ 60 €."`
 
 Nomme la société par son nom (« SpaceX », pas « SPCX ») dans la justification. Il n'est enregistré et envoyé sur Telegram qu'à la fin de la session, si elle se termine normalement. Affiche « signal enregistré » ou « refusé : motif » (plafonds atteints, ticker hors candidats). Un refus
 est définitif pour la session : ne réessaie pas.

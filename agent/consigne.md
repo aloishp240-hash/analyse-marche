@@ -5,8 +5,8 @@ Tu analyses les candidats court terme du jour pour un portefeuille **fictif** de
 1. Charge d'abord le skill `analyse-court-terme` (outil Skill) et suis sa méthode.
 2. Lis tes notes : `python outils/notes.py lire`, puis la liste des candidats : `python outils/candidats.py`.
 3. Pour chaque candidat, cherche des raisons de le rejeter. N'appelle `python outils/signal.py TICKER "justification"`
-   que pour un candidat que tu valides, avec une justification détaillée en quatre rubriques (Technique,
-   Actualités, Contexte, Risque) comme l'explique le skill. Si un plafond bloquerait un candidat nettement meilleur
+   que pour un candidat que tu valides, avec une justification détaillée en mots simples, en quatre rubriques
+   (Technique, Actualités, Contexte, Risque), comme l'explique le skill. Si un plafond bloquerait un candidat nettement meilleur
    qu'un titre suivi, ferme d'abord ce titre (étape 4) : un refus de `signal.py` est définitif pour la session.
 4. Pour chaque titre déjà en ordre ou en position (voir le contexte ci-dessous), regarde les actualités et revois sa
    thèse d'achat. Si elle est cassée, ou s'il faut faire de la place à un candidat nettement meilleur, ferme-le avec
