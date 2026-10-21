@@ -92,13 +92,18 @@ def bilan(ops, cours, qqq, date_limite):
         "r3": _moyenne([m[0] for m in m3]), "q3": _moyenne([m[1] for m in m3]),
         "r6": _moyenne([m[0] for m in m6]), "q6": _moyenne([m[1] for m in m6]),
         "mesures": mesures,
+        "r": _moyenne([m[0] for m in mesures]), "q": _moyenne([m[1] for m in mesures]),
         "part_battu": _moyenne([titre > reference for titre, reference in mesures]),
     }
 
 
 def bat_qqq(b):
-    """Rendement moyen supérieur à celui de QQQ (6 mois, sinon 3 mois) et QQQ battu dans plus de la moitié des cas."""
-    r, q = (b["r6"], b["q6"]) if b["r6"] is not None else (b["r3"], b["q3"])
+    """Rendement moyen supérieur à celui de QQQ et QQQ battu dans plus de la moitié des cas, sur les mêmes copies
+    (`mesures` : 6 mois, sinon 3 mois). Sans les clés r et q, repli sur r6/q6 puis r3/q3."""
+    if "r" in b and "q" in b:
+        r, q = b["r"], b["q"]
+    else:
+        r, q = (b["r6"], b["q6"]) if b["r6"] is not None else (b["r3"], b["q3"])
     part = b["part_battu"]
     return r is not None and q is not None and part is not None and r > q and part > 0.5
 

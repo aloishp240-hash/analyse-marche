@@ -182,6 +182,8 @@ def test_bilan_mesure_a_6_mois_sinon_a_3_mois():
     assert b["mesures"][0][0] == pytest.approx(attendu6, rel=0.01)
     assert b["mesures"][1][0] == pytest.approx(attendu3, rel=0.01)
     assert b["r6"] == pytest.approx(b["mesures"][0][0])
+    assert b["r"] == pytest.approx(sum(m[0] for m in b["mesures"]) / 2)
+    assert b["q"] == pytest.approx(0.0)
 
 
 def test_bat_qqq_exige_la_majorite():
@@ -414,3 +416,13 @@ def test_actions_en_circulation_et_cache(tmp_path, monkeypatch):
 
 def test_constantes_de_seances():
     assert (SEANCES_3M, SEANCES_6M) == (63, 126)
+
+
+def test_bat_qqq_compare_les_memes_copies_que_la_part_battue():
+    # 1 copie à 6 mois (+2 % contre +1 %), 3 copies à 3 mois (+0,1 % contre 0), 2 copies à 3 mois (-30 % contre 0)
+    mesures = [(2.0, 1.0)] + [(0.1, 0.0)] * 3 + [(-30.0, 0.0)] * 2
+    b = {"r3": -9.8, "q3": 0.0, "r6": 2.0, "q6": 1.0, "mesures": mesures,
+         "r": sum(m[0] for m in mesures) / 6, "q": sum(m[1] for m in mesures) / 6, "part_battu": 4 / 6}
+    assert b["r"] < b["q"]
+    assert not bat_qqq(b)
+    assert bat_qqq({**b, "r": 1.0, "q": 0.5})
