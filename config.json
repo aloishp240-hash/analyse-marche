@@ -68,7 +68,7 @@
   },
   "copie": {
     "senat_accepte": false,
-    "alpaca_actif": false,
+    "alpaca_actif": true,
     "dirigeants_copies": true,
     "capital_initial": 3000,
     "part_par_achat_pct": 10,
