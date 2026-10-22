@@ -82,6 +82,15 @@ def test_404_renvoie_none():
     assert ClientSec(contact="a@b.c", session=Session(Reponse(code=404)), pause=0).texte("https://x") is None
 
 
+def test_403_est_une_erreur_sauf_si_demande():
+    c = ClientSec(contact="a@b.c", session=Session(Reponse(code=403), Reponse(code=403), Reponse(code=500)), pause=0)
+    with pytest.raises(ErreurSec):
+        c.texte("https://x")
+    assert c.texte("https://x", absent_si_403=True) is None
+    with pytest.raises(ErreurSec):
+        c.texte("https://x", absent_si_403=True)  # une 500 reste une erreur
+
+
 def test_json_decode_la_reponse():
     c = ClientSec(contact="a@b.c", session=Session(Reponse(octets=b'{"a": 1}'), Reponse(code=404)), pause=0)
     assert c.json("https://x") == {"a": 1}

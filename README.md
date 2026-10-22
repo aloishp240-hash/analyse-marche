@@ -55,5 +55,9 @@ Chaque matin en semaine, après 8 h (heure de Paris), `copie_matin.py` lit les n
 3. Valider la liste des personnes après le test : `.venv/bin/python backtest_copie.py --valider`.
 4. Décider d'activer `copie.alpaca_actif`. Si la copie se suspend (écart avec le compte, ordre refusé), supprimer `copie/suspension.json` une fois le problème compris.
 
-    .venv/bin/python copie_matin.py --force --dry-run   # messages affichés, sans Claude, sans Alpaca, rien d'écrit
-    gh workflow run copie.yml                           # même essai sur GitHub
+Commandes utiles :
+
+```bash
+.venv/bin/python copie_matin.py --force --dry-run   # messages affichés, sans Claude, sans Alpaca, rien d'écrit
+gh workflow run copie.yml                           # même essai sur GitHub
+```

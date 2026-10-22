@@ -223,6 +223,10 @@ def main(argv=None, maintenant=None):
     if actif and not dry_run:
         try:
             client = alpaca.Client()
+        except Exception as erreur:  # copier n'a pas tourné : rien n'est suspendu, aucun achat n'est étiqueté ainsi
+            detail = str(erreur)[:200] if isinstance(erreur, ErreurAlpaca) else type(erreur).__name__
+            return _arreter(f"client Alpaca impossible à créer, nouvel essai au prochain passage ({detail})", dry_run)
+        try:
             plus, signales = copie_alpaca.copier(achats, ventes_a_copier, derniers_cours, client, p, aujourd_hui)
             a_deposer += _textes_copier(plus)
         except ErreurAlpaca as erreur:
@@ -260,7 +264,7 @@ def main(argv=None, maintenant=None):
                                          if (v.personne_id, v.ticker) in positions])
     nouveautes.enregistrer_vus(nouveaux_vus)
     _ecrire_json(DERNIER_LANCEMENT, {"jour": aujourd_hui.isoformat()})
-    return 0
+    return 1 if erreur_copie else 0  # passage complet, mais la copie s'est suspendue : l'exécution apparaît en échec
 
 
 def _lire_bilans():

@@ -51,8 +51,10 @@ class ClientSec:
             if reste > 0:
                 time.sleep(reste)
 
-    def octets(self, url, cache=False):
-        """Contenu brut de la page, ou None si elle n'existe pas (404)."""
+    def octets(self, url, cache=False, absent_si_403=False):
+        """Contenu brut de la page, ou None si elle n'existe pas (404). Dans les Archives d'EDGAR, la SEC répond 403
+        pour un fichier qui n'existe pas : `absent_si_403` le traite alors comme une 404 (toute autre erreur reste
+        une erreur)."""
         fichier = self._fichier_cache(url) if cache else None
         if fichier is not None and fichier.exists():
             return fichier.read_bytes()
@@ -63,7 +65,7 @@ class ClientSec:
             raise ErreurSec(self._masquer(f"SEC injoignable : {erreur}")) from None
         finally:
             self._dernier = time.monotonic()
-        if reponse.status_code == 404:
+        if reponse.status_code == 404 or (absent_si_403 and reponse.status_code == 403):
             return None
         if reponse.status_code >= 400:
             raise ErreurSec(f"la SEC a répondu {reponse.status_code} pour {url}")
@@ -72,9 +74,9 @@ class ClientSec:
             fichier.write_bytes(reponse.content)
         return reponse.content
 
-    def texte(self, url, cache=False):
-        """Contenu de la page décodé en UTF-8, ou None si elle n'existe pas (404)."""
-        contenu = self.octets(url, cache=cache)
+    def texte(self, url, cache=False, absent_si_403=False):
+        """Contenu de la page décodé en UTF-8, ou None si elle n'existe pas (404, ou 403 si `absent_si_403`)."""
+        contenu = self.octets(url, cache=cache, absent_si_403=absent_si_403)
         return None if contenu is None else contenu.decode("utf-8", errors="replace")
 
     def json(self, url, cache=False):

@@ -325,11 +325,29 @@ def test_client_alpaca_impossible_a_creer(monde, monkeypatch):
     assert ecrits(monde) == ["suivis.json"]
 
 
+def test_exception_a_la_creation_du_client(monde, monkeypatch, capsys):
+    regler(monkeypatch, True)
+
+    def lever():
+        raise KeyError(SECRET)
+
+    monkeypatch.setattr(alpaca, "Client", lever)
+    monkeypatch.setattr(copie_alpaca, "copier", lambda *a, **k: pytest.fail("pas de copie sans client"))
+    monde.resultat = ([op()], [], [], monde.nouveaux_vus)
+    assert copie_matin.main(["--force"], maintenant=MERCREDI) == 1
+    assert len(monde.deposes) == 1 and monde.deposes[0].startswith("⚠️ COPIE D'INITIÉS")
+    assert "NOUVEL ACHAT" not in monde.deposes[0] and "seulement signalé" not in monde.deposes[0]
+    assert "KeyError" in monde.deposes[0] and SECRET not in monde.deposes[0]
+    assert ecrits(monde) == ["suivis.json"]
+    sortie = capsys.readouterr()
+    assert SECRET not in sortie.out + sortie.err
+
+
 def test_autre_exception_de_copier(monde, monkeypatch, capsys):
     regler(monkeypatch, True)
     monde.resultat = ([op()], [], [], monde.nouveaux_vus)
     monkeypatch.setattr(copie_alpaca, "copier", Copieur(erreur=RuntimeError(f"TOKEN={SECRET}")))
-    copie_matin.main(["--force"], maintenant=MERCREDI)
+    assert copie_matin.main(["--force"], maintenant=MERCREDI) == 1
     textes = "\n".join(monde.deposes)
     assert "RuntimeError" in textes and SECRET not in textes
     assert "seulement signalé (copie suspendue)" in textes

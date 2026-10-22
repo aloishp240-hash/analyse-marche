@@ -232,6 +232,38 @@ def test_depot_form4_introuvable_un_jour_ferie_est_ignore(tmp_path, marche):
     assert any("1 dépôt(s) du 2026-10-12 introuvable(s)" in n for n in notes)
 
 
+def test_index_form4_403_un_jour_ouvre_est_un_echec_a_relire_sans_erreur(tmp_path, marche):
+    # la SEC répond 403, et non 404, pour un fichier d'Archives qui n'existe pas (index pas encore publié)
+    site = site_form4(**{URL_INDEX_20: Reponse(code=403)})
+    achats, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide(), site)
+    assert achats == []
+    assert any("Form 4" in n and "2026-10-20" in n and "sera relu" in n for n in notes)
+    assert not any("a répondu 403" in n for n in notes)
+    assert vus["dernier_passage"] == "2026-10-19"  # bloqué : le jour sera relu
+
+
+def test_index_form4_403_un_jour_ferie_est_silencieux(tmp_path, marche):
+    jour = date(2026, 10, 12)  # Columbus Day
+    site = Site({url_index(jour): Reponse(code=403)})
+    _, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide("2026-10-09"), site, jour=date(2026, 10, 13))
+    assert vus["dernier_passage"] == "2026-10-12" and not any("Form 4" in n for n in notes)
+
+
+def test_depot_form4_403_est_un_depot_absent(tmp_path, marche):
+    site = site_form4(**{URL_DEPOT: Reponse(code=403)})
+    achats, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide(), site)
+    assert achats == [] and vus["vus"] == {} and vus["dernier_passage"] == "2026-10-19"
+    assert any("Form 4" in n and ACCESSION in n and "sera relu" in n for n in notes)
+    assert not any("a répondu 403" in n for n in notes)
+
+
+def test_index_form4_500_reste_une_erreur(tmp_path, marche):
+    site = site_form4(**{URL_INDEX_20: Reponse(code=500)})
+    _, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide(), site)
+    assert any("Form 4" in n and "500" in n and "sera relu" not in n for n in notes)
+    assert vus == vus_vide()
+
+
 def test_plafond_de_sept_jours_signale_les_jours_sautes(tmp_path, marche):
     # du 6 au 20 octobre : 11 jours ouvrés, les 7 plus récents seulement sont lus
     site = indices_vides(site_form4(), *[date(2026, 10, j) for j in (12, 13, 14, 15, 16, 19)])

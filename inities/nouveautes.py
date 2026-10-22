@@ -220,14 +220,14 @@ def _lire_form4(lecture, jours, deja, client):
         trimestre = (jour.month - 1) // 3 + 1
         url = dirigeants.URL_INDEX_JOUR.format(annee=jour.year, trimestre=trimestre, jour=jour)
         try:
-            index = client.texte(url)
+            index = client.texte(url, absent_si_403=True)
         except ErreurSec as erreur:
             lecture.erreur(f"Form 4, index du {jour.isoformat()}", erreur)
             continue
         if index is None:
-            # EDGAR n'est fermé que les jours fériés fédéraux : ailleurs, une 404 est une panne ou un index pas encore publié
+            # EDGAR n'est fermé que les jours fériés fédéraux : ailleurs, une 404 (ou 403, la SEC répond 403 pour un fichier d'Archives absent) est une panne ou un index pas encore publié
             if not _ferie_americain(jour):
-                lecture.echoue(f"Form 4, index du {jour.isoformat()}", "absent (404) un jour ouvré, sera relu")
+                lecture.echoue(f"Form 4, index du {jour.isoformat()}", "absent (404 ou 403) un jour ouvré, sera relu")
             continue
         introuvables = 0
         for chemin in dirigeants.lire_index_jour(index):
@@ -236,14 +236,14 @@ def _lire_form4(lecture, jours, deja, client):
             if jeton in deja or jeton in lecture.lots:
                 continue
             try:
-                depot = client.texte(URL_ARCHIVES + chemin)
+                depot = client.texte(URL_ARCHIVES + chemin, absent_si_403=True)
             except ErreurSec as erreur:
                 lecture.erreur(f"Form 4, dépôt {accession}", erreur)
                 depot, echec = None, True
             else:
                 echec = depot is None and not _ferie_americain(jour)
                 if echec:
-                    lecture.echoue(f"Form 4, dépôt {accession}", "introuvable (404) un jour ouvré, sera relu")
+                    lecture.echoue(f"Form 4, dépôt {accession}", "introuvable (404 ou 403) un jour ouvré, sera relu")
             if echec:
                 echecs_de_suite += 1
                 if echecs_de_suite >= ECHECS_DE_SUITE_MAX:
