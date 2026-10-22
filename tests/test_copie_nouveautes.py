@@ -311,16 +311,40 @@ def test_achat_de_dirigeant_sans_les_criteres_ecarte(tmp_path, marche):
 def test_achat_hors_univers_ecarte_et_compte(tmp_path, marche):
     marche.actions["DKS"] = 1e6  # 1 million d'actions à 100 $ : 100 M$
     achats, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide(), site_form4())
-    assert achats == [] and any("1 achat(s) hors univers" in n for n in notes)
+    assert achats == [] and any("1 achat(s) hors univers" in n and "DKS" in n for n in notes)
     assert vus["dernier_passage"] == "2026-10-20"  # dépôt lu : le jour est passé
 
 
-def test_nombre_d_actions_inconnu_exclut_le_titre(tmp_path, marche):
-    # les autres titres du même appel ont une donnée : seul DDOG est « hors univers », sans blocage
+def test_nombre_d_actions_inconnu_n_est_ni_hors_univers_ni_vu(tmp_path, marche):
+    # DDOG n'a pas de nombre d'actions alors que d'autres titres du même appel en ont : sa déclaration est relue
     marche.actions["DDOG"] = None
     achats, _, notes, vus = passer(tmp_path, suivis_de(JACKSON), vus_vide(), session_chambre=site_chambre())
-    assert [o.ticker for o in achats] == ["EL", "GH"] and any("1 achat(s) hors univers" in n for n in notes)
-    assert "chambre:20035551" in vus["vus"] and not any("Yahoo" in n for n in notes)
+    assert achats == [] and "chambre:20035551" not in vus["vus"]
+    assert any("DDOG" in n and "sera relu" in n for n in notes) and not any("hors univers" in n for n in notes)
+    assert vus["dernier_passage"] == "2026-10-19"  # bloqué : les Form 4 des jours à lire seront relus
+    marche.actions["DDOG"] = 1e9  # la donnée revient : la déclaration est enfin traitée
+    achats2, _, _, vus2 = passer(tmp_path, suivis_de(JACKSON), vus, session_chambre=site_chambre())
+    assert "DDOG" in {o.ticker for o in achats2} and "chambre:20035551" in vus2["vus"]
+
+
+def test_titre_sans_cours_n_est_pas_marque_vu(tmp_path, marche, monkeypatch):
+    charger = cours.charger
+
+    def sans_ddog(tickers, *args, **kwargs):
+        return {t: df for t, df in charger(tickers, *args, **kwargs).items() if t != "DDOG"}
+
+    monkeypatch.setattr(cours, "charger", sans_ddog)
+    achats, _, notes, vus = passer(tmp_path, suivis_de(JACKSON), vus_vide(), session_chambre=site_chambre())
+    assert achats == [] and "chambre:20035551" not in vus["vus"]
+    assert any("DDOG" in n and "sera relu" in n for n in notes) and not any("hors univers" in n for n in notes)
+
+
+def test_aucun_cours_recu_est_une_panne_et_ne_marque_rien(tmp_path, marche, monkeypatch):
+    monkeypatch.setattr(cours, "charger", lambda tickers, *args, **kwargs: {})
+    achats, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide(), site_form4())
+    assert achats == [] and vus["vus"] == {} and vus["dernier_passage"] == "2026-10-19"
+    assert any("cours indisponibles" in n and "sera relu" in n and "DKS" in n for n in notes)
+    assert not any("hors univers" in n for n in notes)
 
 
 def test_aucune_donnee_pour_tout_le_lot_est_une_panne_yahoo(tmp_path, marche):
@@ -706,3 +730,94 @@ def test_enregistrer_vus_est_atomique(tmp_path, monkeypatch):
     with pytest.raises(OSError):
         enregistrer_vus({"dernier_passage": "2026-10-20", "vus": {}, "achats_dirigeants": []})
     assert charger_vus()["dernier_passage"] == "2026-10-19"  # l'ancien fichier est intact
+
+
+# --- budget de temps de la lecture des Form 4 ---
+
+class Horloge:
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+
+class SiteLent(Site):
+    """Chaque dépôt Form 4 téléchargé coûte `cout` secondes à l'horloge."""
+
+    def __init__(self, horloge, reponses, cout=400):
+        super().__init__(reponses)
+        self.horloge, self.cout = horloge, cout
+
+    def request(self, methode, url, **options):
+        if url.endswith(".txt"):
+            self.horloge.t += self.cout
+        return super().request(methode, url, **options)
+
+
+def accession(n):
+    return f"0001772409-26-{n:06d}"
+
+
+def chemin_de(n):
+    return f"edgar/data/1772409/{accession(n)}.txt"
+
+
+def site_lent(horloge, depots_par_jour, cout=400):
+    """depots_par_jour : {jour: [numéros de dépôt]} ; les dépôts valent tous le même achat de DKS."""
+    reponses = {}
+    for jour, numeros in depots_par_jour.items():
+        reponses[url_index(jour)] = Reponse(octets=index_form4(*[chemin_de(n) for n in numeros]))
+        for n in numeros:
+            reponses["https://www.sec.gov/Archives/" + chemin_de(n)] = Reponse(octets=depot_form4())
+    return SiteLent(horloge, reponses, cout)
+
+
+def test_budget_depasse_au_milieu_d_un_jour_garde_les_depots_lus(tmp_path, marche):
+    horloge = Horloge()
+    site = site_lent(horloge, {date(2026, 10, 20): [1, 2, 3, 4]})
+    achats, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide(), site, horloge=horloge)
+    assert len([u for u in site.urls if u.endswith(".txt")]) == 3  # le 4e n'est pas téléchargé
+    assert sorted(o.source_id.split(":")[1] for o in achats) == [accession(1), accession(2), accession(3)]
+    assert vus["vus"] == {f"form4:{accession(n)}": "2026-10-20" for n in (1, 2, 3)}
+    assert vus["dernier_passage"] == "2026-10-19"  # le 20 n'est pas lu en entier
+    assert any("900" in n and "1 jour(s) restent à lire" in n for n in notes)
+
+
+def test_passage_suivant_reprend_sans_doublon(tmp_path, marche):
+    horloge = Horloge()
+    jour = date(2026, 10, 20)
+    achats1, _, _, vus1 = passer(tmp_path, SUIVIS_FONDS, vus_vide(), site_lent(horloge, {jour: [1, 2, 3, 4]}),
+                                 horloge=horloge)
+    assert len(achats1) == 3
+    horloge2 = Horloge()
+    site2 = site_lent(horloge2, {jour: [1, 2, 3, 4]})
+    achats2, _, notes2, vus2 = passer(tmp_path, SUIVIS_FONDS, vus1, site2, horloge=horloge2)
+    assert [o.source_id.split(":")[1] for o in achats2] == [accession(4)]
+    assert [u for u in site2.urls if u.endswith(".txt")] == ["https://www.sec.gov/Archives/" + chemin_de(4)]
+    assert vus2["dernier_passage"] == "2026-10-20" and not any("restent à lire" in n for n in notes2)
+
+
+def test_budget_depasse_garde_les_jours_lus_en_entier(tmp_path, marche):
+    horloge = Horloge()
+    site = site_lent(horloge, {date(2026, 10, 19): [1], date(2026, 10, 20): [2, 3, 4, 5]})
+    achats, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide("2026-10-16"), site, horloge=horloge)
+    assert vus["dernier_passage"] == "2026-10-19"
+    assert vus["vus"] == {f"form4:{accession(n)}": "2026-10-20" for n in (2, 3)}  # le 19 est lu et purgé
+    assert any("1 jour(s) restent à lire" in n for n in notes)
+
+
+def test_budget_depasse_avant_un_jour_laisse_les_jours_restants(tmp_path, marche):
+    horloge = Horloge()
+    site = site_lent(horloge, {date(2026, 10, 19): [1, 2, 3], date(2026, 10, 20): [4]})
+    achats, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide("2026-10-16"), site, horloge=horloge)
+    assert vus["dernier_passage"] == "2026-10-19"
+    assert [u for u in site.urls if u.endswith(".txt")][-1].endswith(chemin_de(3))
+    assert any("1 jour(s) restent à lire" in n for n in notes)
+
+
+def test_sans_depassement_aucune_note_de_budget(tmp_path, marche):
+    horloge = Horloge()
+    site = site_lent(horloge, {date(2026, 10, 20): [1, 2]}, cout=10)
+    _, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide(), site, horloge=horloge)
+    assert vus["dernier_passage"] == "2026-10-20" and not any("restent à lire" in n for n in notes)
