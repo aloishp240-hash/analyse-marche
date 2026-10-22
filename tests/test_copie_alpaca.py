@@ -799,6 +799,14 @@ def test_achat_deja_revendu_dans_le_meme_lot_est_signale():
     assert not copie_alpaca.SUSPENSION.exists()
 
 
+def test_achat_marque_deja_revendu_par_la_collecte_est_signale():
+    client = FauxClient()
+    etat, _, signales = entrees(etat_vide(), [achat(details={"deja_revendu": True})], {"AAA": 100.0}, client, P,
+                                AUJOURD_HUI)
+    assert client.appels_de("passer_oto") == [] and etat["positions"] == []
+    assert [(op.ticker, motif) for op, motif in signales] == [("AAA", "déjà revendu")]
+
+
 def test_vente_d_une_autre_personne_ou_anterieure_n_empeche_pas_l_achat():
     client = FauxClient()
     ventes = [vente(operation=date(2026, 10, 10)), vente(personne="politicien:chambre:Autre|X|CA-02"),

@@ -326,7 +326,10 @@ def _passer_oto(client, op, nombre, stop, id_client):
 
 
 def _deja_revendu(op, ventes):
-    """Vrai si la même personne a déjà vendu ce titre, avec une opération au moins aussi récente que l'achat."""
+    """Vrai si la même personne a déjà vendu ce titre, avec une opération au moins aussi récente que l'achat (dans
+    `ventes`, ou vue par la collecte, qui ne renvoie pas la vente d'un titre pas encore détenu)."""
+    if op.details.get("deja_revendu") is True:
+        return True
     return any(v.sens == "vente" and v.personne_id == op.personne_id and v.ticker == op.ticker
                and v.date_operation >= op.date_operation for v in ventes)
 

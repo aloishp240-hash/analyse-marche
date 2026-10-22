@@ -499,6 +499,13 @@ def collecter(suivis, vus, aujourd_hui, config, client_sec, *, etat=None, sessio
                     hors_univers += 1
             elif op.sens == "vente" and (op.personne_id, op.ticker) in positions:
                 ventes.append(op)
+    # la vente d'un titre pas encore détenu n'est pas renvoyée : l'achat déjà revendu est marqué ici
+    reventes = {}
+    for op in (op for ops in lots.values() for op in ops if op.sens == "vente"):
+        cle = (op.personne_id, op.ticker)
+        reventes[cle] = max(reventes.get(cle, op.date_operation), op.date_operation)
+    achats = [replace(op, details={**op.details, "deja_revendu": True})
+              if reventes.get((op.personne_id, op.ticker), date.min) >= op.date_operation else op for op in achats]
     if hors_univers:
         notes.append(f"{hors_univers} achat(s) hors univers (capitalisation sous le seuil : "
                      f"{', '.join(sorted(hors))})")

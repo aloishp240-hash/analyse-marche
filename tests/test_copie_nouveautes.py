@@ -603,6 +603,18 @@ def test_fonds_suivi_seulement(tmp_path, marche, monkeypatch):
     assert achats2 == [] and ventes2 == []
 
 
+def test_achat_deja_revendu_dans_le_passage_est_marque(tmp_path, marche, monkeypatch):
+    # la vente d'un titre pas encore détenu n'est pas renvoyée : collecter marque elle-même l'achat
+    ops = [operation("fonds", "fonds:1135730", "MSFT", source="13f:ACC1:AAA", poids_pct=5),
+           operation("fonds", "fonds:1135730", "MSFT", sens="vente", source="13f:ACC2:AAA"),
+           operation("fonds", "fonds:1135730", "AAPL", source="13f:ACC1:BBB", poids_pct=5),
+           operation("fonds", PERSHING, "AAPL", sens="vente", source="13f:ACC3:BBB")]
+    monkeypatch.setattr(fonds, "telecharger", lambda *args, **kwargs: (ops, 2))
+    achats, ventes, _, _ = passer(tmp_path, SUIVIS_FONDS, vus_vide())
+    assert {o.ticker: o.details.get("deja_revendu", False) for o in achats} == {"MSFT": True, "AAPL": False}
+    assert ventes == []
+
+
 def test_13f_non_lu_sans_fonds_suivi(tmp_path, marche, monkeypatch):
     monkeypatch.setattr(fonds, "telecharger", lambda *a, **k: pytest.fail("13F lu sans fonds suivi"))
     passer(tmp_path, suivis_de(JACKSON), vus_vide(), session_chambre=site_chambre())
