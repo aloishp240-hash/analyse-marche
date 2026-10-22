@@ -81,6 +81,11 @@ class Client:
     def ordre(self, identifiant):
         return self._appel("GET", f"/v2/orders/{identifiant}", params={"nested": "true"})
 
+    def ordre_par_id_client(self, id_client):
+        """Retrouve un ordre déjà passé avec cet identifiant client (Alpaca refuse de le réutiliser)."""
+        return self._appel("GET", "/v2/orders:by_client_order_id",
+                           params={"client_order_id": id_client, "nested": "true"})
+
     def passer_bracket(self, ticker, quantite, entree, stop, objectif, id_client, validite="gtc"):
         """Achat à cours limité `entree` ; à l'exécution, Alpaca pose l'objectif et le stop ensemble."""
         if not isinstance(quantite, int) or quantite < 1:

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from datetime import date, timedelta
 
 import pytest
@@ -25,6 +26,9 @@ class FauxClient:
         self.refuse_modification = self.refuse_fermeture = self.refuse_restop = None
         self.remplacements = 0
         self.ordres_par_id, self.positions_alpaca, self.appels = {}, [], []
+        self.ids_clients = set()
+        self.annulation = None  # statuts successifs du stop après son annulation (sinon « canceled » aussitôt)
+        self.reste_a_lire = {}
 
     def _noter(self, *appel):
         self.appels.append(appel)
@@ -38,9 +42,29 @@ class FauxClient:
     def positions(self):
         return list(self.positions_alpaca)
 
+    def _trouver(self, identifiant):
+        if identifiant in self.ordres_par_id:
+            return self.ordres_par_id[identifiant]
+        for ordre in self.ordres_par_id.values():
+            for jambe in ordre.get("legs", []):
+                if jambe["id"] == identifiant:
+                    return jambe
+        raise ErreurAlpaca("Alpaca a répondu 404 : order not found")
+
     def ordre(self, identifiant):
         self._noter("ordre", identifiant)
-        return self.ordres_par_id[identifiant]
+        ordre = self._trouver(identifiant)
+        file = self.reste_a_lire.get(identifiant)
+        if file:
+            ordre["status"] = file.pop(0) if len(file) > 1 else file[0]
+        return ordre
+
+    def ordre_par_id_client(self, id_client):
+        self._noter("ordre_par_id_client", id_client)
+        for ordre in self.ordres_par_id.values():
+            if ordre.get("client_order_id") == id_client:
+                return ordre
+        raise ErreurAlpaca("Alpaca a répondu 404 : order not found")
 
     def passer_oto(self, ticker, quantite, stop, id_client, validite="gtc"):
         self._noter("passer_oto", ticker, quantite, stop, id_client, validite)
@@ -48,6 +72,9 @@ class FauxClient:
             raise KeyError("id")
         if self.refuse:
             raise ErreurAlpaca(self.refuse)
+        if id_client in self.ids_clients:
+            raise ErreurAlpaca("Alpaca a répondu 422 : client_order_id must be unique")
+        self.ids_clients.add(id_client)
         n = len(self.ordres_par_id) + 1
         ordre = {"id": f"ordre-{n}", "client_order_id": id_client, "symbol": ticker, "status": "accepted",
                  "filled_avg_price": None, "legs": [{"id": f"stop-{n}", "type": "stop", "status": "held",
@@ -62,9 +89,10 @@ class FauxClient:
         ordre["legs"][0]["status"] = "new"
         self.positions_alpaca.append({"symbol": ordre["symbol"], "qty": "3"})
 
-    def stop_declenche(self, identifiant):
+    def stop_declenche(self, identifiant, prix=None):
         ordre = self.ordres_par_id[identifiant]
         ordre["legs"][0]["status"] = "filled"
+        ordre["legs"][0]["filled_avg_price"] = str(prix if prix is not None else ordre["legs"][0]["stop_price"])
         self.positions_alpaca = [pos for pos in self.positions_alpaca if pos["symbol"] != ordre["symbol"]]
 
     def modifier_stop(self, identifiant, stop):
@@ -86,17 +114,23 @@ class FauxClient:
         self._noter("passer_stop", ticker, quantite, stop, id_client, validite)
         if self.refuse_restop:
             raise ErreurAlpaca(self.refuse_restop)
+        self.ordres_par_id["restop-1"] = {"id": "restop-1", "client_order_id": id_client, "symbol": ticker,
+                                          "type": "stop", "status": "new", "stop_price": f"{stop:.2f}"}
         return {"id": "restop-1"}
 
     def annuler(self, identifiant):
         self._noter("annuler", identifiant)
+        if self.annulation:
+            self.reste_a_lire[identifiant] = list(self.annulation)
+        else:
+            self._trouver(identifiant)["status"] = "canceled"
 
     def fermer_position(self, ticker):
         self._noter("fermer_position", ticker)
         if self.refuse_fermeture:
             raise ErreurAlpaca(self.refuse_fermeture)
         self.positions_alpaca = [pos for pos in self.positions_alpaca if pos["symbol"] != ticker]
-        return {"id": f"vente-{ticker}", "side": "sell", "status": "accepted"}
+        return {"id": f"vente-{ticker}", "side": "sell", "status": "accepted", "filled_avg_price": None}
 
 
 @pytest.fixture(autouse=True)
@@ -345,7 +379,7 @@ def test_position_alpaca_inconnue_suspend():
 
 
 def test_jambe_stop_manquante_suspend():
-    client, etat = client_avec_position()
+    client, etat = client_avec_position(id_stop=None)
     client.ordres_par_id["ordre-1"]["legs"] = []
     _, messages = rapprocher(etat, client, P)
     assert copie_alpaca.SUSPENSION.exists() and "stop" in messages[0]
@@ -484,7 +518,7 @@ def test_fermeture_refusee_repose_le_stop_une_fois():
     client.refuse_fermeture = "403 qty held"
     etat, messages = sorties(etat, [], AUJOURD_HUI, client)
     assert client.appels_de("passer_stop") == [
-        ("passer_stop", "AAA", 3, 88.5, "copie-restop-copie-chambre-1-1", "gtc")]
+        ("passer_stop", "AAA", 3, 88.5, "copie-restop-20261021-copie-chambre-1-1", "gtc")]
     assert len(client.appels_de("fermer_position")) == 1
     assert etat["positions"][0]["id_stop"] == "restop-1"
     assert copie_alpaca.SUSPENSION.exists() and "reposé" in messages[0] and "non reposé" not in messages[0]
@@ -519,5 +553,204 @@ def test_pas_de_rachat_le_jour_d_une_sortie():
 def test_jambe_annulee_n_ecrase_pas_le_stop_repose():
     client, etat = client_avec_position(id_stop="restop-1", stop_recale=True)
     client.ordres_par_id["ordre-1"]["legs"][0]["status"] = "canceled"
+    client.passer_stop("AAA", 3, 85.0, "copie-restop-x")
     etat, _ = rapprocher(etat, client, P)
+    assert etat["positions"][0]["id_stop"] == "restop-1" and not copie_alpaca.SUSPENSION.exists()
+
+
+# --- lecture directe du stop (I4) ---
+
+def test_le_stop_est_lu_directement_et_non_dans_les_jambes_de_l_achat():
+    client, etat = client_avec_position()
+    client.ordres_par_id["ordre-1"]["legs"] = []  # l'ordre d'achat ne détaille plus ses jambes
+    client.ordres_par_id["stop-1"] = {"id": "stop-1", "type": "stop", "status": "new", "stop_price": "85.00"}
+    etat, messages = rapprocher(etat, client, P)
+    assert ("ordre", "stop-1") in client.appels and not copie_alpaca.SUSPENSION.exists()
+    assert client.appels_de("modifier_stop") == [("modifier_stop", "stop-1", 100 * 0.85)]
+
+
+def test_stop_execute_lu_sur_son_propre_ordre():
+    client, etat = client_avec_position()
+    client.ordres_par_id["stop-1"] = {"id": "stop-1", "type": "stop", "status": "filled", "stop_price": "85.00",
+                                      "filled_avg_price": "84.9"}
+    client.positions_alpaca = []
+    etat, messages = rapprocher(etat, client, P)
+    assert etat["positions"] == [] and etat["historique"][0]["raison"] == "stop"
+    assert "84.90" in messages[0] and not copie_alpaca.SUSPENSION.exists()
+
+
+def test_stop_remplace_ailleurs_suspend():
+    client, etat = client_avec_position()
+    client.ordres_par_id["ordre-1"]["legs"][0]["status"] = "replaced"
+    _, messages = rapprocher(etat, client, P)
+    assert copie_alpaca.SUSPENSION.exists() and "replaced" in suspension()["motif"]
+
+
+def test_sans_id_de_stop_on_le_prend_dans_les_jambes_une_fois():
+    client, etat = client_avec_position(id_stop=None)
+    etat, _ = rapprocher(etat, client, P)
+    assert etat["positions"][0]["id_stop"] == "stop-1-r1"  # lu sur la jambe, puis recalé
+    assert not copie_alpaca.SUSPENSION.exists()
+
+
+def test_stop_repose_est_lu_ensuite_par_son_identifiant():
+    client, etat = client_avec_position(sortie_prevue="2026-10-21")
+    client.refuse_fermeture = "403 qty held"
+    etat, _ = sorties(etat, [], AUJOURD_HUI, client)
     assert etat["positions"][0]["id_stop"] == "restop-1"
+    client.appels.clear()
+    rapprocher(etat, client, P)
+    assert ("ordre", "restop-1") in client.appels
+
+
+# --- annulation du stop avant la vente (I5) ---
+
+def test_vente_attend_que_le_stop_soit_annule():
+    client, etat = client_avec_position()
+    client.annulation = ["pending_cancel", "pending_cancel", "canceled"]
+    pauses = []
+    etat, messages = sorties(etat, [vente()], AUJOURD_HUI, client, pause=pauses.append)
+    lectures = [a for a in client.appels if a == ("ordre", "stop-1")]
+    assert len(lectures) == 3 and pauses == [0.5, 0.5]
+    noms = [a[0] for a in client.appels]
+    assert noms.index("annuler") < noms.index("fermer_position")
+    assert etat["historique"][0]["id_vente"] == "vente-AAA" and not copie_alpaca.SUSPENSION.exists()
+
+
+def test_stop_jamais_annule_pas_de_vente():
+    client, etat = client_avec_position()
+    client.annulation = ["pending_cancel"]
+    pauses = []
+    etat, messages = sorties(etat, [vente()], AUJOURD_HUI, client, pause=pauses.append)
+    assert len([a for a in client.appels if a == ("ordre", "stop-1")]) == 10 and len(pauses) == 9
+    assert client.appels_de("fermer_position") == [] and client.appels_de("passer_stop") == []
+    assert len(etat["positions"]) == 1 and copie_alpaca.SUSPENSION.exists()
+    assert "AAA" in messages[0] and "pending_cancel" in messages[0]
+
+
+def test_stop_execute_pendant_l_attente_est_une_sortie_par_stop():
+    client, etat = client_avec_position()
+    client.annulation = ["pending_cancel", "filled"]
+    client.ordres_par_id["ordre-1"]["legs"][0]["filled_avg_price"] = "85"
+    etat, messages = sorties(etat, [vente()], AUJOURD_HUI, client, pause=lambda s: None)
+    assert client.appels_de("fermer_position") == [] and etat["positions"] == []
+    assert etat["historique"][0]["raison"] == "stop" and not copie_alpaca.SUSPENSION.exists()
+    assert len(messages) == 1 and "stop" in messages[0].lower() and "-15.0 %" in messages[0]
+
+
+# --- messages de sortie perdus (M1) ---
+
+def test_erreur_alpaca_apres_une_sortie_garde_ses_messages():
+    client, etat = client_avec_position("AAA")
+    client.stop_declenche("ordre-1", 80)
+    etat["positions"].append(position("BBB", n=9))  # son ordre n'existe pas chez Alpaca : 404
+    copie_alpaca.enregistrer_etat(etat)
+    with pytest.raises(ErreurAlpaca) as exc:
+        copier([], [], {}, client, P, AUJOURD_HUI)
+    assert len(exc.value.messages) == 1 and "AAA" in exc.value.messages[0] and "-20.0 %" in exc.value.messages[0]
+    enregistre = charger_etat()
+    assert [pos["ticker"] for pos in enregistre["positions"]] == ["BBB"]
+    assert enregistre["historique"][0]["ticker"] == "AAA"
+
+
+def test_exception_inattendue_garde_aussi_les_messages():
+    client = FauxClient()
+    client.plante_au_appel = 2
+    achats = [achat(), achat(ticker="BBB", source="chambre:20035552:1")]
+    with pytest.raises(KeyError) as exc:
+        copier(achats, [], {"AAA": 100.0, "BBB": 100.0}, client, P, AUJOURD_HUI)
+    assert len(exc.value.messages) == 1 and "AAA" in exc.value.messages[0]
+
+
+# --- identifiant client déjà utilisé (M2) ---
+
+def test_identifiant_client_deja_utilise_reprend_l_ordre_existant():
+    client = FauxClient()
+    client.passer_oto("AAA", 3, 85.0, "copie-chambre-20035551-1")  # passé, mais l'état n'a pas été enregistré
+    client.appels.clear()
+    etat, messages, signales = entrees(etat_vide(), [achat()], {"AAA": 100.0}, client, P, AUJOURD_HUI)
+    assert client.appels_de("ordre_par_id_client") == [("ordre_par_id_client", "copie-chambre-20035551-1")]
+    assert signales == [] and not copie_alpaca.SUSPENSION.exists()
+    assert etat["positions"][0]["id_ordre"] == "ordre-1" and etat["positions"][0]["id_stop"] == "stop-1"
+    assert len(client.ordres_par_id) == 1 and len(messages) == 1 and "AAA" in messages[0]
+
+
+def test_identifiant_client_deja_utilise_mais_ordre_introuvable_suspend():
+    client = FauxClient()
+    client.ids_clients.add("copie-chambre-20035551-1")  # refusé, mais l'ordre n'est pas retrouvé
+    etat, messages, signales = entrees(etat_vide(), [achat()], {"AAA": 100.0}, client, P, AUJOURD_HUI)
+    assert etat["positions"] == [] and copie_alpaca.SUSPENSION.exists()
+    assert [motif for _, motif in signales] == ["ordre refusé par Alpaca"]
+
+
+def test_ordre_retrouve_d_un_autre_titre_est_refuse():
+    client = FauxClient()
+    client.passer_oto("ZZZ", 3, 85.0, "copie-chambre-20035551-1")
+    etat, _, signales = entrees(etat_vide(), [achat()], {"AAA": 100.0}, client, P, AUJOURD_HUI)
+    assert etat["positions"] == [] and copie_alpaca.SUSPENSION.exists()
+
+
+def test_autre_refus_ne_cherche_pas_l_ordre():
+    client = FauxClient(refuse="403 insufficient buying power")
+    entrees(etat_vide(), [achat()], {"AAA": 100.0}, client, P, AUJOURD_HUI)
+    assert client.appels_de("ordre_par_id_client") == []
+
+
+# --- écritures atomiques (M4) ---
+
+def test_etat_et_suspension_sont_ecrits_de_facon_atomique(monkeypatch, tmp_path):
+    copie_alpaca.enregistrer_etat({"positions": [position()], "historique": []})
+    copie_alpaca._suspendre("premier motif", AUJOURD_HUI)
+    avant = (copie_alpaca.POSITIONS.read_text(), copie_alpaca.SUSPENSION.read_text())
+
+    def plante(source, destination):
+        raise OSError("disque plein")
+
+    monkeypatch.setattr(copie_alpaca.os, "replace", plante)
+    with pytest.raises(OSError):
+        copie_alpaca.enregistrer_etat(etat_vide())
+    copie_alpaca.SUSPENSION.unlink()
+    with pytest.raises(OSError):
+        copie_alpaca._suspendre("autre motif", AUJOURD_HUI)
+    assert not copie_alpaca.SUSPENSION.exists()
+    assert copie_alpaca.POSITIONS.read_text() == avant[0]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["positions.json"]  # aucun fichier temporaire
+
+
+# --- messages de résultat (M6) ---
+
+def test_message_d_entree_donne_prix_et_stop():
+    client = FauxClient()
+    _, messages, _ = entrees(etat_vide(), [achat()], {"AAA": 100.0}, client, P, AUJOURD_HUI)
+    assert messages == ["📥 ACHAT COPIÉ — AAA\n3 actions à environ 100.00 $ (compte paper)\nStop posé à 85.00 $"]
+
+
+def test_stop_execute_donne_le_resultat():
+    client, etat = client_avec_position(prix=100)
+    client.ordres_par_id["ordre-1"]["filled_avg_price"] = "100"
+    client.stop_declenche("ordre-1", 84)
+    etat, messages = rapprocher(etat, client, P)
+    assert messages == ["📤 VENTE — AAA : stop exécuté\nEntrée 100.00 $, sortie 84.00 $ : -16.0 % (-48.00 $ sur 3 actions)"]
+
+
+def test_vente_demandee_puis_resultat_a_l_execution():
+    client, etat = client_avec_position(prix=100)
+    client.ordres_par_id["ordre-1"]["filled_avg_price"] = "100"
+    etat, messages = sorties(etat, [vente()], AUJOURD_HUI, client)
+    assert len(messages) == 1 and "AAA" in messages[0] and "résultat" in messages[0]
+    ligne = etat["historique"][0]
+    assert ligne["prix_entree"] == 100.0 and ligne["quantite"] == 3 and ligne["vente_confirmee"] is False
+    client.ordres_par_id["vente-AAA"] = {"id": "vente-AAA", "status": "filled", "filled_avg_price": "110"}
+    etat, messages = rapprocher(etat, client, P)
+    assert messages == ["📤 VENTE — AAA : vente publiée par la personne copiée\n"
+                        "Entrée 100.00 $, sortie 110.00 $ : +10.0 % (+30.00 $ sur 3 actions)"]
+    etat, messages = rapprocher(etat, client, P)
+    assert messages == []  # annoncé une seule fois
+
+
+def test_vente_avant_execution_de_l_achat_sans_resultat():
+    client = FauxClient()
+    client.passer_oto("AAA", 3, 85.0, "copie-x")
+    etat = {"positions": [position()], "historique": []}
+    etat, messages = sorties(etat, [vente()], AUJOURD_HUI, client)
+    assert "résultat n/d" in messages[0] and "AAA" in messages[0]

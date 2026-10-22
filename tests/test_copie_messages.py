@@ -215,10 +215,15 @@ def test_messages_de_copie():
     texte = messages.achat_copie("NVDA", 2, 120.5, 102.43)
     assert "NVDA" in texte and "2 actions" in texte and "120.50" in texte and "102.43" in texte
     assert "1 action " in messages.achat_copie("NVDA", 1, 120.5, 102.43) + " "
-    vente = messages.vente("NVDA", "vente publiée par la personne", 6.789)
-    assert "NVDA" in vente and "vente publiée par la personne" in vente and "+6.8 %" in vente
-    assert "-3.0 %" in messages.vente("NVDA", "stop", -3.0)
-    assert messages.vente("NVDA", "6 mois", None) == "📤 VENTE — NVDA : 6 mois (résultat n/d)"
+    gagnee = messages.vente("NVDA", "vente publiée par la personne", 100.0, 110.0, 3)
+    assert gagnee == ("📤 VENTE — NVDA : vente publiée par la personne\n"
+                      "Entrée 100.00 $, sortie 110.00 $ : +10.0 % (+30.00 $ sur 3 actions)")
+    perdue = messages.vente("NVDA", "stop exécuté", 100.0, 85.0, 1)
+    assert "-15.0 %" in perdue and "-15.00 $ sur 1 action)" in perdue
+    assert messages.vente("NVDA", "6 mois") == "📤 VENTE — NVDA : 6 mois (résultat n/d)"
+    assert messages.vente("NVDA", "6 mois", 0, 10, 3).endswith("(résultat n/d)")
+    sans_quantite = messages.vente("NVDA", "stop", 100.0, 90.0)
+    assert "-10.0 %" in sans_quantite and "$ sur" not in sans_quantite
     assert "panne Yahoo" in messages.alerte("panne Yahoo")
 
 

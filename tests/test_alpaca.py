@@ -213,6 +213,14 @@ def test_annuler_un_ordre():
     assert (appel["methode"], appel["url"]) == ("DELETE", URL_PAPER + "/v2/orders/abc")
 
 
+def test_ordre_par_identifiant_client():
+    c = client(Reponse(contenu={"id": "abc", "client_order_id": "copie-x"}))
+    assert c.ordre_par_id_client("copie-x")["id"] == "abc"
+    appel = c.session.appels[0]
+    assert (appel["methode"], appel["url"]) == ("GET", URL_PAPER + "/v2/orders:by_client_order_id")
+    assert appel["params"] == {"client_order_id": "copie-x", "nested": "true"}
+
+
 def test_ordres_et_positions():
     c = client(Reponse(contenu=[{"id": "a"}]), Reponse(contenu=[{"symbol": "NVDA"}]))
     assert c.ordres() == [{"id": "a"}]

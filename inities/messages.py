@@ -110,9 +110,15 @@ def achat_copie(ticker, quantite, prix, stop):
                       f"Stop posé à {stop:.2f} $"])
 
 
-def vente(ticker, raison, resultat_pct):
-    resultat = "résultat n/d" if resultat_pct is None else f"résultat {_pourcentage(resultat_pct)}"
-    return f"📤 VENTE — {ticker} : {raison} ({resultat})"
+def vente(ticker, raison, entree=None, sortie=None, quantite=None):
+    """Sortie d'une position copiée : prix d'entrée et de sortie, résultat en % puis en $ si la quantité est connue."""
+    titre = f"📤 VENTE — {ticker} : {raison}"
+    if not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in (entree, sortie)) or entree <= 0:
+        return f"{titre} (résultat n/d)"
+    detail = f"{_pourcentage((sortie / entree - 1) * 100)}"
+    if isinstance(quantite, (int, float)) and not isinstance(quantite, bool) and quantite > 0:
+        detail += f" ({(sortie - entree) * quantite:+.2f} $ sur {_actions(quantite)})"
+    return f"{titre}\nEntrée {entree:.2f} $, sortie {sortie:.2f} $ : {detail}"
 
 
 def alerte(texte):
