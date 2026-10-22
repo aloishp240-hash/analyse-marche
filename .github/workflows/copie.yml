@@ -1,0 +1,84 @@
+# Copie d'initiés : lecture des nouvelles déclarations chaque matin, copie des achats sur le compte Alpaca paper (fictif)
+# si copie.alpaca_actif vaut true, puis messages Telegram.
+name: copie
+
+on:
+  schedule:
+    # Toutes les 30 min en semaine, 5h-8h30 UTC : couvre 8h heure de Paris, heure d'été comme d'hiver.
+    # Le script ne travaille qu'une fois par jour, après 8h heure de Paris, et sort aussitôt sinon.
+    - cron: "0,30 5-8 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Test : messages affichés dans le journal, sans Claude, Alpaca ni Telegram, rien d'enregistré"
+        type: boolean
+        default: true
+
+concurrency:
+  group: copie
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  copie:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      # Sans identifiants enregistrés : Claude n'a aucun jeton GitHub à portée ; seule l'étape de commit en reçoit un.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: pip install -r requirements.txt
+      # Caches (cours, déclarations de la SEC), conservés d'un lancement à l'autre
+      - uses: actions/cache@v4
+        with:
+          path: donnees
+          key: copie-${{ github.run_id }}
+          restore-keys: copie-
+      - run: npm install -g @anthropic-ai/claude-code@2.1.296
+      # Les messages vont dans agent/a-envoyer.json : ils ne partent qu'après l'enregistrement de l'état (dernière étape).
+      # L'état est commité même si ce passage a échoué (ordres déjà passés chez Alpaca, suspension éventuelle).
+      - if: ${{ !inputs.test }}
+        run: python copie_matin.py
+        env:
+          SEC_CONTACT: ${{ secrets.SEC_CONTACT }}
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      - if: ${{ inputs.test }}
+        run: python copie_matin.py --force --dry-run
+        env:
+          SEC_CONTACT: ${{ secrets.SEC_CONTACT }}
+      # L'étape échoue si les 3 essais de push échouent : les messages ne partent alors pas, et le passage suivant,
+      # reparti de l'état précédent, les refera.
+      - id: commit
+        if: ${{ !cancelled() && !inputs.test }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add copie
+          git diff --cached --quiet || {
+            git commit -m "Copie d'initiés : mise à jour $(date -u +%F)"
+            for essai in 1 2 3; do
+              git pull --rebase && git push && exit 0
+              git rebase --abort 2>/dev/null || true
+              sleep 10
+            done
+            echo "Enregistrement de l'état impossible après 3 essais" >&2
+            exit 1
+          }
+      - if: ${{ !cancelled() && !inputs.test && steps.commit.outcome == 'success' }}
+        run: python envoyer.py
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

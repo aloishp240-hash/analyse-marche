@@ -43,3 +43,17 @@ Commandes utiles :
     .venv/bin/python agent.py --force --dry-run      # candidats et consigne, sans appeler Claude
     .venv/bin/python momentum.py --force --dry-run   # décision momentum sur la dernière séance, sans envoi
     gh workflow run court-terme.yml                  # même test sur GitHub
+
+## Copie d'initiés (compte Alpaca paper, fictif)
+
+Chaque matin en semaine, après 8 h (heure de Paris), `copie_matin.py` lit les nouvelles déclarations d'élus américains (Chambre), de dirigeants (Form 4) et de grands fonds (13F) de la liste validée dans `copie/suivis.json`. Il envoie sur Telegram un message par nouvel achat (qui, quoi, combien, délai, variation depuis leur achat, contexte écrit par Claude) et, si `copie.alpaca_actif` vaut `true`, copie l'achat sur le compte **paper** : 10 % du compte, stop à −15 % chez Alpaca, sortie si la personne vend ou après 6 mois. Claude ne fixe ni prix, ni quantité, ni stop, et ne décide d'aucune vente. Le workflow `.github/workflows/copie.yml` commite l'état dans `copie/`. Fictif, pas un conseil financier.
+
+À faire soi-même :
+
+1. Lire et accepter les conditions du site du Sénat, puis mettre `copie.senat_accepte` à `true` dans `config.json`.
+2. Ajouter les secrets GitHub `SEC_CONTACT` (un contact, exigé par la SEC), `ALPACA_API_KEY_ID` et `ALPACA_API_SECRET_KEY` (clés **paper**), en plus de `CLAUDE_CODE_OAUTH_TOKEN`, `TELEGRAM_TOKEN` et `TELEGRAM_CHAT_ID`.
+3. Valider la liste des personnes après le test : `.venv/bin/python backtest_copie.py --valider`.
+4. Décider d'activer `copie.alpaca_actif`. Si la copie se suspend (écart avec le compte, ordre refusé), supprimer `copie/suspension.json` une fois le problème compris.
+
+    .venv/bin/python copie_matin.py --force --dry-run   # messages affichés, sans Claude, sans Alpaca, rien d'écrit
+    gh workflow run copie.yml                           # même essai sur GitHub
