@@ -32,7 +32,7 @@ SANS_POSITION = {"positions": [], "historique": []}
 
 
 def vus_vide(dernier="2026-10-19"):
-    return {"dernier_passage": dernier, "vus": {}, "achats_dirigeants": []}
+    return {"dernier_passage": dernier, "vus": {}, "achats_dirigeants": [], "indisponibles": {}}
 
 
 def suivis_de(*ids):
@@ -322,9 +322,26 @@ def test_nombre_d_actions_inconnu_n_est_ni_hors_univers_ni_vu(tmp_path, marche):
     assert achats == [] and "chambre:20035551" not in vus["vus"]
     assert any("DDOG" in n and "sera relu" in n for n in notes) and not any("hors univers" in n for n in notes)
     assert vus["dernier_passage"] == "2026-10-19"  # bloqué : les Form 4 des jours à lire seront relus
+    assert vus["indisponibles"] == {"DDOG": "2026-10-21"}  # premier jour sans donnée
     marche.actions["DDOG"] = 1e9  # la donnée revient : la déclaration est enfin traitée
     achats2, _, _, vus2 = passer(tmp_path, suivis_de(JACKSON), vus, session_chambre=site_chambre())
     assert "DDOG" in {o.ticker for o in achats2} and "chambre:20035551" in vus2["vus"]
+    assert vus2["indisponibles"] == {}  # retiré de la liste dès que la donnée revient
+
+
+def test_titre_sans_donnees_ecarte_apres_deux_jours(tmp_path, marche):
+    marche.actions["DDOG"] = None  # la donnée ne revient pas
+    vus = vus_vide()
+    for jour in (date(2026, 10, 21), date(2026, 10, 22)):  # bloqué moins de 2 jours : relu
+        achats, _, notes, vus = passer(tmp_path, suivis_de(JACKSON), vus, session_chambre=site_chambre(), jour=jour)
+        assert achats == [] and "chambre:20035551" not in vus["vus"] and vus["dernier_passage"] == "2026-10-19"
+        assert vus["indisponibles"] == {"DDOG": "2026-10-21"}  # la date de première absence ne bouge pas
+    achats, _, notes, vus = passer(tmp_path, suivis_de(JACKSON), vus, session_chambre=site_chambre(),
+                                   jour=date(2026, 10, 23))
+    assert "DDOG" not in {o.ticker for o in achats} and achats  # les autres achats du dépôt passent
+    assert "chambre:20035551" in vus["vus"] and vus["indisponibles"] == {}
+    assert any("données manquantes depuis 2 jours, achat écarté (DDOG)" in n for n in notes)
+    assert not any("hors univers" in n for n in notes) and not any("sera relu" in n for n in notes)
 
 
 def test_titre_sans_cours_n_est_pas_marque_vu(tmp_path, marche, monkeypatch):
@@ -343,7 +360,8 @@ def test_aucun_cours_recu_est_une_panne_et_ne_marque_rien(tmp_path, marche, monk
     monkeypatch.setattr(cours, "charger", lambda tickers, *args, **kwargs: {})
     achats, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide(), site_form4())
     assert achats == [] and vus["vus"] == {} and vus["dernier_passage"] == "2026-10-19"
-    assert any("cours indisponibles" in n and "sera relu" in n and "DKS" in n for n in notes)
+    assert any("Yahoo" in n and "relus" in n and "DKS" in n for n in notes)
+    assert vus["indisponibles"] == {}  # une panne ne lance pas le délai de 2 jours : relue tant qu'elle dure
     assert not any("hors univers" in n for n in notes)
 
 
@@ -704,7 +722,8 @@ def test_charger_et_enregistrer_vus(tmp_path, monkeypatch):
     monkeypatch.setattr(nouveautes, "VUS", tmp_path / "copie" / "vus.json")
     assert charger_vus() == vus_vide(None)
     vus = {"dernier_passage": "2026-10-20", "vus": {"form4:a": "2026-10-20"},
-           "achats_dirigeants": [{"ticker": "DKS", "date": "2026-09-22", "personne_id": "dirigeant:1"}]}
+           "achats_dirigeants": [{"ticker": "DKS", "date": "2026-09-22", "personne_id": "dirigeant:1"}],
+           "indisponibles": {"DDOG": "2026-10-20"}}
     enregistrer_vus(vus)
     assert charger_vus() == vus
     assert [p.name for p in (tmp_path / "copie").iterdir()] == ["vus.json"]  # pas de fichier temporaire oublié
@@ -723,7 +742,8 @@ def test_vus_json_de_mauvaise_forme_leve_une_erreur(tmp_path, monkeypatch):
     monkeypatch.setattr(nouveautes, "VUS", tmp_path / "vus.json")
     formes = ['{"vus": 5}', '{"vus": null}', '{"vus": [[1], 2]}', '{"achats_dirigeants": 3}',
               '{"achats_dirigeants": [1]}', '{"achats_dirigeants": [["a"]]}', '{"achats_dirigeants": null}',
-              '{"dernier_passage": 5}', '{"dernier_passage": "demain"}', '{"vus": {"a": {"b": 1}}}']
+              '{"dernier_passage": 5}', '{"dernier_passage": "demain"}', '{"vus": {"a": {"b": 1}}}',
+              '{"indisponibles": [1]}', '{"indisponibles": {"DDOG": 3}}', '{"indisponibles": {"DDOG": "hier"}}']
     for contenu in formes:
         (tmp_path / "vus.json").write_text(contenu)
         with pytest.raises(nouveautes.ErreurVus):
@@ -737,7 +757,7 @@ def test_vus_json_ancien_format_et_dates_vides_restent_lisibles(tmp_path, monkey
     vus = charger_vus()
     assert list(vus["vus"]) == ["chambre:1"] and vus["dernier_passage"] is None
     (tmp_path / "vus.json").write_text('{}')
-    assert charger_vus() == vus_vide(None)
+    assert charger_vus() == vus_vide(None)  # ancien fichier sans « indisponibles »
 
 
 def test_enregistrer_vus_est_atomique(tmp_path, monkeypatch):

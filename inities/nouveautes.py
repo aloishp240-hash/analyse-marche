@@ -40,6 +40,7 @@ VUS = DOSSIER / "vus.json"
 DOSSIER_CACHE = DONNEES / "cache_copie"
 URL_ARCHIVES = "https://www.sec.gov/Archives/"
 VUS_JOURS = 45  # un identifiant autre qu'un Form 4 s'oublie après ce nombre de jours
+INDISPONIBLE_JOURS = 2  # un titre sans cours ou sans nombre d'actions bloque son dépôt au plus ce nombre de jours
 RECUL_ELUS_JOURS = 14  # la Chambre et le Sénat sont relus sur ce nombre de jours avant le dernier passage
 JOURS_MAX = 7
 FORM4_DUREE_MAX_S = 900  # budget de temps pour télécharger les dépôts Form 4 (le job GitHub est limité à 40 minutes)
@@ -57,7 +58,7 @@ class ErreurVus(Exception):
 
 
 def _vus_vide():
-    return {"dernier_passage": None, "vus": {}, "achats_dirigeants": []}
+    return {"dernier_passage": None, "vus": {}, "achats_dirigeants": [], "indisponibles": {}}
 
 
 def charger_vus():
@@ -110,7 +111,13 @@ def _copie_vus(vus, aujourd_hui=None):
     achats = vus.get("achats_dirigeants", [])
     if not isinstance(achats, list) or not all(isinstance(a, dict) for a in achats):
         raise TypeError("achats_dirigeants")
-    return {"dernier_passage": dernier, "vus": jetons, "achats_dirigeants": [dict(a) for a in achats]}
+    absents = vus.get("indisponibles", {})  # clé absente des anciens fichiers
+    if not isinstance(absents, dict):
+        raise TypeError("indisponibles")
+    for jour in absents.values():
+        date.fromisoformat(jour)
+    return {"dernier_passage": dernier, "vus": jetons, "achats_dirigeants": [dict(a) for a in achats],
+            "indisponibles": dict(absents)}
 
 
 def _purger(jetons, dernier_passage, aujourd_hui):
@@ -336,8 +343,8 @@ def _univers(tickers, aujourd_hui, dossier, p):
     capitalisation_min.
 
     Seul un titre dont la capitalisation a été calculée et reste sous le seuil est « hors univers » (marqué vu). Un titre
-    sans cours ou sans nombre d'actions est à relire au passage suivant, comme tout le lot si l'appel lève ou ne donne
-    rien du tout : c'est une panne de Yahoo."""
+    sans cours ou sans nombre d'actions est « indisponible ». Si l'appel lève ou ne donne rien du tout, c'est une panne
+    de Yahoo : tout le lot est rangé avec les titres limités, à relire au passage suivant."""
     tickers = sorted(tickers)
     if not tickers:
         return set(), set(), set(), set()
@@ -350,7 +357,7 @@ def _univers(tickers, aujourd_hui, dossier, p):
     except Exception:  # panne ou limite de Yahoo : on ne conclut rien sur ces titres
         return set(), set(tickers), set(), set()
     if not prix:
-        return set(), limites & set(tickers), set(tickers) - limites, set()
+        return set(), set(tickers), set(), set()
     retenus, indisponibles, hors = set(), set(), set()
     for ticker in tickers:
         if ticker in limites:
@@ -458,14 +465,26 @@ def collecter(suivis, vus, aujourd_hui, config, client_sec, *, etat=None, sessio
 
     candidats = {op.ticker for ops in lots.values() for op in ops if _a_signaler(op, suivis_ids, p)}
     dans_univers, limites, indisponibles, hors = _univers(candidats, aujourd_hui, dossier_cours, p)
-    a_relire = limites | indisponibles
+    # un titre sans données bloque son dépôt INDISPONIBLE_JOURS jours au plus, puis son achat est écarté ;
+    # un titre tranché (retenu ou hors univers) sort de la liste, un titre en panne y garde sa date
+    absents = {ticker: jour for ticker, jour in vus["indisponibles"].items()
+               if ticker not in dans_univers | hors | indisponibles}
+    absents.update({ticker: vus["indisponibles"].get(ticker, aujourd_hui.isoformat()) for ticker in indisponibles})
+    ecartes = {ticker: (aujourd_hui - date.fromisoformat(absents[ticker])).days for ticker in indisponibles
+               if (aujourd_hui - date.fromisoformat(absents[ticker])).days >= INDISPONIBLE_JOURS}
+    for ticker in ecartes:
+        del absents[ticker]
+    a_relire = limites | (indisponibles - set(ecartes))
     bloques = {jeton for jeton, ops in lots.items()
                if any(op.ticker in a_relire and _a_signaler(op, suivis_ids, p) for op in ops)}
     if limites:
-        notes.append(f"Univers : Yahoo limite le débit pour {', '.join(sorted(limites))} ; dépôts relus au passage suivant")
-    if indisponibles:
-        notes.append(f"Univers : cours indisponibles ou nombre d'actions inconnu pour {', '.join(sorted(indisponibles))}, "
+        notes.append(f"Univers : Yahoo en panne ou limite le débit pour {', '.join(sorted(limites))} ; "
+                     "dépôts relus au passage suivant")
+    if attente := indisponibles - set(ecartes):
+        notes.append(f"Univers : cours indisponibles ou nombre d'actions inconnu pour {', '.join(sorted(attente))}, "
                      "sera relu au passage suivant")
+    for ticker, jours_absent in sorted(ecartes.items()):
+        notes.append(f"Univers : données manquantes depuis {jours_absent} jours, achat écarté ({ticker})")
     lecture.echec = lecture.echec or bool(a_relire)
 
     achats, ventes, hors_univers = [], [], 0
@@ -476,7 +495,7 @@ def collecter(suivis, vus, aujourd_hui, config, client_sec, *, etat=None, sessio
             if _a_signaler(op, suivis_ids, p):
                 if op.ticker in dans_univers:
                     achats.append(op)
-                else:
+                elif op.ticker in hors:
                     hors_univers += 1
             elif op.sens == "vente" and (op.personne_id, op.ticker) in positions:
                 ventes.append(op)
@@ -507,5 +526,7 @@ def collecter(suivis, vus, aujourd_hui, config, client_sec, *, etat=None, sessio
         "dernier_passage": dernier_passage,
         "vus": _purger(marques, dernier_passage, aujourd_hui),
         "achats_dirigeants": historique,
+        "indisponibles": {ticker: jour for ticker, jour in absents.items()
+                          if jour >= (aujourd_hui - timedelta(days=VUS_JOURS)).isoformat()},
     }
     return sorted(achats, key=_ordre), sorted(ventes, key=_ordre), notes, nouveaux
