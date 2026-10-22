@@ -136,3 +136,10 @@ def test_membre_sans_date_ignore():
     xml = (b"<FinancialDisclosure><Member><Last>A</Last><First>B</First><FilingType>P</FilingType>"
            b"<StateDst>TX01</StateDst><Year>2026</Year><DocID>1</DocID></Member></FinancialDisclosure>")
     assert lire_index(xml) == []
+
+
+def test_pdf_404_est_introuvable_et_une_autre_erreur_est_une_panne(tmp_path):
+    assert chambre._pdf(Session(Reponse(code=404)), ENTREE_JACKSON, tmp_path) is None
+    for code in (429, 500, 503):
+        with pytest.raises(ErreurChambre, match=str(code)):
+            chambre._pdf(Session(Reponse(code=code)), ENTREE_JACKSON, tmp_path)

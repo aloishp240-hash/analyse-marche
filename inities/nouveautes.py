@@ -3,19 +3,25 @@
 Elles donnent les achats à signaler et les ventes des personnes copiées (celles qui ont une position).
 `copie/vus.json` garde ce qui a déjà été traité, pour ne jamais renvoyer deux fois la même chose :
 
-    {"dernier_passage": "AAAA-MM-JJ", "vus": ["chambre:<DocID>", "senat:<uuid>", "form4:<accession>",
-     "13f:<accession>", ...], "achats_dirigeants": [{"ticker", "date", "personne_id"}, ...]}
+    {"dernier_passage": "AAAA-MM-JJ", "vus": {"chambre:<DocID>": "AAAA-MM-JJ", "senat:<uuid>": ..., "form4:<accession>": ...,
+     "13f:<accession>": ...}, "achats_dirigeants": [{"ticker", "date", "personne_id"}, ...]}
 
+La date d'un identifiant vu est le jour de l'index pour un Form 4 et le jour du passage pour le reste. Elle sert à purger :
+un Form 4 dont le jour est au plus `dernier_passage` n'est plus jamais relu, les autres identifiants s'oublient après
+45 jours (la Chambre et le Sénat sont relus sur 14 jours). L'ancien format (liste d'identifiants) est encore lu.
 `dernier_passage` est le dernier jour dont l'index Form 4 a été lu : il n'avance que si aucune source n'a échoué.
 Une source en erreur produit une note et ne marque rien comme vu : le passage suivant recommence. Le texte lu en ligne est
 une donnée : on n'en extrait que des champs précis, jamais d'instruction.
 """
 import json
+import os
 from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
+import pandas as pd
 import requests
+from pandas.tseries.holiday import USFederalHolidayCalendar
 
 from commun import DONNEES
 from inities import chambre, cours, dirigeants, fonds, senat
@@ -30,7 +36,8 @@ from inities.senat import AccordNonAccepte, ErreurSenat
 VUS = DOSSIER / "vus.json"
 DOSSIER_CACHE = DONNEES / "cache_copie"
 URL_ARCHIVES = "https://www.sec.gov/Archives/"
-VUS_MAX = 20000
+VUS_JOURS = 45  # un identifiant autre qu'un Form 4 s'oublie après ce nombre de jours
+RECUL_ELUS_JOURS = 14  # la Chambre et le Sénat sont relus sur ce nombre de jours avant le dernier passage
 JOURS_MAX = 7
 ECHECS_DE_SUITE_MAX = 5  # la SEC ne répond plus : on arrête de lire les dépôts au lieu d'attendre chaque délai
 JOURS_COURS = 10  # recul pour trouver le dernier cours
@@ -41,26 +48,62 @@ def _raison(erreur):
     return str(erreur) if isinstance(erreur, _ERREURS_CONNUES) else type(erreur).__name__
 
 
+class ErreurVus(Exception):
+    """vus.json existe mais n'est pas lisible : on ne repart pas de zéro en silence (tout serait renvoyé)."""
+
+
 def _vus_vide():
-    return {"dernier_passage": None, "vus": [], "achats_dirigeants": []}
+    return {"dernier_passage": None, "vus": {}, "achats_dirigeants": []}
 
 
 def charger_vus():
     try:
-        vus = json.loads(VUS.read_text())
-    except (FileNotFoundError, ValueError):
+        texte = VUS.read_text()
+    except FileNotFoundError:
         return _vus_vide()
-    return _copie_vus(vus if isinstance(vus, dict) else {})
+    try:
+        vus = json.loads(texte)
+    except ValueError as erreur:
+        raise ErreurVus(f"{VUS.name} illisible (JSON invalide) : à corriger ou à supprimer à la main") from erreur
+    if not isinstance(vus, dict):
+        raise ErreurVus(f"{VUS.name} illisible (objet JSON attendu) : à corriger ou à supprimer à la main")
+    return _copie_vus(vus)
 
 
 def enregistrer_vus(vus):
+    """Écriture atomique : fichier temporaire puis os.replace, jamais un vus.json à moitié écrit."""
     VUS.parent.mkdir(parents=True, exist_ok=True)
-    VUS.write_text(json.dumps(vus, indent=1, ensure_ascii=False) + "\n")
+    temporaire = VUS.with_name(VUS.name + ".tmp")
+    try:
+        temporaire.write_text(json.dumps(vus, indent=1, ensure_ascii=False) + "\n")
+        os.replace(temporaire, VUS)
+    finally:
+        temporaire.unlink(missing_ok=True)
 
 
-def _copie_vus(vus):
-    return {"dernier_passage": vus.get("dernier_passage"), "vus": list(vus.get("vus", [])),
+def _copie_vus(vus, aujourd_hui=None):
+    """Copie au format dict ; l'ancien format liste est daté d'aujourd'hui."""
+    brut = vus.get("vus", {})
+    if isinstance(brut, dict):
+        jetons = {str(jeton): str(jour) for jeton, jour in brut.items()}
+    else:
+        jour = (aujourd_hui or date.today()).isoformat()
+        jetons = {str(jeton): jour for jeton in brut}
+    return {"dernier_passage": vus.get("dernier_passage"), "vus": jetons,
             "achats_dirigeants": [dict(a) for a in vus.get("achats_dirigeants", [])]}
+
+
+def _purger(jetons, dernier_passage, aujourd_hui):
+    """Retire les Form 4 dont le jour est au plus `dernier_passage` (ils ne seront plus relus) et les autres
+    identifiants vus il y a plus de VUS_JOURS jours."""
+    limite = (aujourd_hui - timedelta(days=VUS_JOURS)).isoformat()
+
+    def a_garder(jeton, jour):
+        if jeton.startswith("form4:"):
+            return dernier_passage is None or jour > dernier_passage
+        return jour >= limite
+
+    return {jeton: jour for jeton, jour in jetons.items() if a_garder(jeton, jour)}
 
 
 def _jeton(source_id):
@@ -70,7 +113,7 @@ def _jeton(source_id):
 
 
 def est_doublon(op, vus):
-    return _jeton(op.source_id) in set(vus.get("vus", []))
+    return _jeton(op.source_id) in vus.get("vus", ())
 
 
 def _veille_ouvree(jour):
@@ -80,17 +123,26 @@ def _veille_ouvree(jour):
     return jour
 
 
-def jours_a_lire(dernier_passage, aujourd_hui):
-    """Jours ouvrés de ]dernier_passage, aujourd'hui[, les JOURS_MAX plus récents ; sans dernier_passage, la veille
-    ouvrée seulement."""
-    if dernier_passage is None:
-        return [_veille_ouvree(aujourd_hui)]
+def _jours_ouvres(dernier_passage, aujourd_hui):
     jours, jour = [], dernier_passage + timedelta(days=1)
     while jour < aujourd_hui:
         if jour.weekday() < 5:
             jours.append(jour)
         jour += timedelta(days=1)
-    return jours[-JOURS_MAX:]
+    return jours
+
+
+def jours_a_lire(dernier_passage, aujourd_hui):
+    """Jours ouvrés de ]dernier_passage, aujourd'hui[, les JOURS_MAX plus récents ; sans dernier_passage, la veille
+    ouvrée seulement."""
+    if dernier_passage is None:
+        return [_veille_ouvree(aujourd_hui)]
+    return _jours_ouvres(dernier_passage, aujourd_hui)[-JOURS_MAX:]
+
+
+def _ferie_americain(jour):
+    """Jour férié fédéral américain : EDGAR est fermé, il n'y a pas d'index ce jour-là."""
+    return len(USFederalHolidayCalendar().holidays(start=pd.Timestamp(jour), end=pd.Timestamp(jour))) > 0
 
 
 class _Lecture:
@@ -98,15 +150,20 @@ class _Lecture:
 
     def __init__(self):
         self.lots, self.notes, self.echec = {}, [], False
+        self.jours = {}  # jour de l'index de chaque dépôt Form 4 (date de son identifiant dans vus)
+
+    def echoue(self, source, message):
+        self.notes.append(f"{source} : {message}")
+        self.echec = True
 
     def erreur(self, source, erreur):
-        self.notes.append(f"{source} : {_raison(erreur)}")
-        self.echec = True
+        self.echoue(source, _raison(erreur))
 
 
 # --- sources ---
 
 def _lire_chambre(lecture, personnes, deja, depuis, aujourd_hui, session, dossier):
+    """`depuis` : premier jour de publication relu (le vus empêche les doublons)."""
     session = session or requests.Session()
     entrees = []
     for annee in range(depuis.year, aujourd_hui.year + 1):
@@ -123,7 +180,7 @@ def _lire_chambre(lecture, personnes, deja, depuis, aujourd_hui, session, dossie
             lecture.erreur(f"Chambre, déclaration {entree['doc_id']}", erreur)
             continue
         if pdf is None:
-            lecture.notes.append(f"Chambre : PDF de la déclaration {entree['doc_id']} introuvable")
+            lecture.notes.append(f"Chambre : PDF de la déclaration {entree['doc_id']} introuvable (404), sera relu")
         elif operations is None:
             lecture.notes.append(f"Chambre : déclaration {entree['doc_id']} illisible (pas de texte)")
             lecture.lots[jeton] = []
@@ -149,7 +206,7 @@ def _lire_senat(lecture, personnes, deja, depuis, aujourd_hui, config, session, 
             lecture.erreur(f"Sénat, déclaration {entree['uuid']}", erreur)
             continue
         if page is None:
-            lecture.notes.append(f"Sénat : page de la déclaration {entree['uuid']} introuvable")
+            lecture.notes.append(f"Sénat : page de la déclaration {entree['uuid']} introuvable (404), sera relue")
         elif operations is None:
             lecture.notes.append(f"Sénat : déclaration {entree['uuid']} illisible (tableau absent)")
             lecture.lots[jeton] = []
@@ -168,7 +225,9 @@ def _lire_form4(lecture, jours, deja, client):
             lecture.erreur(f"Form 4, index du {jour.isoformat()}", erreur)
             continue
         if index is None:
-            lecture.notes.append(f"Form 4 : index du {jour.isoformat()} absent (404), traité comme un jour vide")
+            # EDGAR n'est fermé que les jours fériés fédéraux : ailleurs, une 404 est une panne ou un index pas encore publié
+            if not _ferie_americain(jour):
+                lecture.echoue(f"Form 4, index du {jour.isoformat()}", "absent (404) un jour ouvré, sera relu")
             continue
         introuvables = 0
         for chemin in dirigeants.lire_index_jour(index):
@@ -180,17 +239,24 @@ def _lire_form4(lecture, jours, deja, client):
                 depot = client.texte(URL_ARCHIVES + chemin)
             except ErreurSec as erreur:
                 lecture.erreur(f"Form 4, dépôt {accession}", erreur)
+                depot, echec = None, True
+            else:
+                echec = depot is None and not _ferie_americain(jour)
+                if echec:
+                    lecture.echoue(f"Form 4, dépôt {accession}", "introuvable (404) un jour ouvré, sera relu")
+            if echec:
                 echecs_de_suite += 1
                 if echecs_de_suite >= ECHECS_DE_SUITE_MAX:
                     lecture.notes.append("Form 4 : lecture arrêtée après plusieurs échecs de suite")
                     return
                 continue
             echecs_de_suite = 0
-            if depot is None:
+            if depot is None:  # jour férié : rien à lire
                 introuvables += 1
                 continue
             xml = dirigeants.extraire_xml(depot)
             lecture.lots[jeton] = dirigeants.lire_form4(xml, accession, jour) if xml else []
+            lecture.jours[jeton] = jour.isoformat()
         if introuvables:
             lecture.notes.append(f"Form 4 : {introuvables} dépôt(s) du {jour.isoformat()} introuvable(s)")
 
@@ -217,14 +283,23 @@ def _lire_fonds(lecture, personnes, deja, depuis, client, p, dossier):
 # --- univers ---
 
 def _univers(tickers, aujourd_hui, dossier, p):
-    """(tickers dans l'univers, tickers que Yahoo limite encore). Univers simplifié : capitalisation (nombre d'actions
-    actuel × dernier cours) d'au moins capitalisation_min ; une donnée manquante exclut le titre."""
+    """(tickers dans l'univers, tickers que Yahoo limite ou ne sert plus). Univers simplifié : capitalisation (nombre
+    d'actions actuel × dernier cours) d'au moins capitalisation_min.
+
+    Une donnée manquante exclut le titre (« hors univers ») seulement si d'autres titres du même appel en ont : si
+    l'appel lève, ou ne donne rien du tout pour un lot non vide, c'est une panne de Yahoo et tous les titres sont
+    à relire au passage suivant."""
     tickers = sorted(tickers)
     if not tickers:
         return set(), set()
     limites = set()
-    actions = cours.actions_en_circulation(tickers, dossier, limites=limites)
-    prix = cours.charger(tickers, aujourd_hui - timedelta(days=JOURS_COURS), aujourd_hui, dossier, limites=limites)
+    try:
+        actions = cours.actions_en_circulation(tickers, dossier, limites=limites)
+        if not actions:
+            return set(), set(tickers)
+        prix = cours.charger(tickers, aujourd_hui - timedelta(days=JOURS_COURS), aujourd_hui, dossier, limites=limites)
+    except Exception:  # panne ou limite de Yahoo : on ne conclut rien sur ces titres
+        return set(), set(tickers)
     retenus = set()
     for ticker in tickers:
         nombre, df = actions.get(ticker), prix.get(ticker)
@@ -281,7 +356,7 @@ def collecter(suivis, vus, aujourd_hui, config, client_sec, *, etat=None, sessio
     `vus` n'est pas modifié. Les ventes sont celles des personnes qui ont une position, sur leurs titres. Un achat
     hors de l'univers, ou dont le ticker est illisible, est écarté et compté dans les notes."""
     p = config["copie"]
-    vus = _copie_vus(vus)
+    vus = _copie_vus(vus, aujourd_hui)
     etat = charger_etat() if etat is None else etat
     dossier_cache = Path(dossier_cache) if dossier_cache else DOSSIER_CACHE
     dossier_cours = Path(dossier_cours) if dossier_cours else dossier_cache / "cours"
@@ -289,19 +364,27 @@ def collecter(suivis, vus, aujourd_hui, config, client_sec, *, etat=None, sessio
     dernier = date.fromisoformat(vus["dernier_passage"]) if vus["dernier_passage"] else None
     jours = jours_a_lire(dernier, aujourd_hui)
     depuis = dernier or jours[0]
+    depuis_elus = depuis - timedelta(days=RECUL_ELUS_JOURS)  # une déclaration peut apparaître plusieurs jours après
 
     suivis_ids = {x["personne_id"] for x in suivis.get("personnes", [])}
     positions = {(pos["personne_id"], pos["ticker"]) for pos in etat["positions"]}
     personnes = suivis_ids | {personne_id for personne_id, _ in positions}
 
     lecture = _Lecture()
+    if dernier is not None and (sautes := len(_jours_ouvres(dernier, aujourd_hui)) - len(jours)):
+        lecture.notes.append(f"Form 4 : {sautes} jour(s) ouvré(s) avant le {jours[0].isoformat()} ne seront pas lus "
+                             f"(plafond de {JOURS_MAX} jours)")
     sources = []
     if any(i.startswith("politicien:chambre:") for i in personnes):
-        sources.append(("Chambre", lambda: _lire_chambre(lecture, personnes, deja, depuis, aujourd_hui,
+        sources.append(("Chambre", lambda: _lire_chambre(lecture, personnes, deja, depuis_elus, aujourd_hui,
                                                           session_chambre, dossier_cache / "chambre")))
-    if config["copie"].get("senat_accepte") is True and any(i.startswith("politicien:senat:") for i in personnes):
-        sources.append(("Sénat", lambda: _lire_senat(lecture, personnes, deja, depuis, aujourd_hui, config,
+    suivis_senat = sum(i.startswith("politicien:senat:") for i in personnes)
+    if suivis_senat and config["copie"].get("senat_accepte") is True:
+        sources.append(("Sénat", lambda: _lire_senat(lecture, personnes, deja, depuis_elus, aujourd_hui, config,
                                                       session_senat, dossier_cache / "senat")))
+    elif suivis_senat:
+        lecture.notes.append(f"Sénat : {suivis_senat} personne(s) suivie(s) mais accord du site non accepté "
+                             "(senat_accepte), déclarations non lues")
     sources.append(("Form 4", lambda: _lire_form4(lecture, jours, deja, client_sec)))
     if any(i.startswith("fonds:") for i in personnes):
         sources.append(("13F", lambda: _lire_fonds(lecture, personnes, deja, depuis, client_sec, p,
@@ -352,10 +435,12 @@ def collecter(suivis, vus, aujourd_hui, config, client_sec, *, etat=None, sessio
             if ligne not in historique:
                 historique.append(ligne)
 
-    marques = [jeton for jeton in lots if jeton not in bloques]
+    dernier_passage = vus["dernier_passage"] if lecture.echec or not jours else jours[-1].isoformat()
+    marques = {**{jeton: lecture.jours.get(jeton, aujourd_hui.isoformat()) for jeton in lots if jeton not in bloques},
+               **vus["vus"]}  # un identifiant déjà vu garde sa date
     nouveaux = {
-        "dernier_passage": vus["dernier_passage"] if lecture.echec or not jours else jours[-1].isoformat(),
-        "vus": list(dict.fromkeys(vus["vus"] + marques))[-VUS_MAX:],
+        "dernier_passage": dernier_passage,
+        "vus": _purger(marques, dernier_passage, aujourd_hui),
         "achats_dirigeants": historique,
     }
     return sorted(achats, key=_ordre), sorted(ventes, key=_ordre), notes, nouveaux

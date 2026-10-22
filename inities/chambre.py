@@ -113,13 +113,16 @@ def _index_annuel(session, annee):
 
 
 def _pdf(session, entree, dossier):
-    """Octets du PDF (cache disque), ou None s'il est introuvable."""
+    """Octets du PDF (cache disque), ou None s'il est introuvable (404). Toute autre réponse que 200 (5xx, 429...) lève
+    ErreurChambre : le site est en panne, le PDF n'est pas « introuvable »."""
     fichier = dossier / f"{entree['doc_id']}.pdf"
     if fichier.exists():
         return fichier.read_bytes()
     reponse = _lire(session, URL_PDF.format(annee=entree["annee"], doc_id=entree["doc_id"]))
-    if reponse.status_code != 200:
+    if reponse.status_code == 404:
         return None
+    if reponse.status_code != 200:
+        raise ErreurChambre(f"PDF {entree['doc_id']} de la Chambre indisponible (code {reponse.status_code})")
     dossier.mkdir(parents=True, exist_ok=True)
     fichier.write_bytes(reponse.content)
     return reponse.content

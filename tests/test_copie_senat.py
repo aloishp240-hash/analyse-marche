@@ -219,3 +219,10 @@ def test_telecharger_attrape_toute_erreur_d_analyse(tmp_path, monkeypatch):
                       Reponse(texte=_page()), Reponse(texte=_page()))
     ops, lues, illisibles = telecharger(CONFIG, date(2026, 10, 1), date(2026, 10, 15), tmp_path, session=session)
     assert (lues, illisibles) == (1, 1) and {o.source_id.split(":")[1] for o in ops} == {autre}
+
+
+def test_page_404_est_introuvable_et_une_autre_erreur_est_une_panne(tmp_path):
+    assert senat._page(Session(Reponse(code=404)), ENTREE, tmp_path) == (None, False)
+    for code in (429, 500, 503):
+        with pytest.raises(ErreurSenat, match=str(code)):
+            senat._page(Session(Reponse(code=code)), ENTREE, tmp_path)

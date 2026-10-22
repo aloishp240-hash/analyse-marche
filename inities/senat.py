@@ -154,13 +154,16 @@ def lire_declaration(page, entree):
 
 
 def _page(session, entree, dossier):
-    """(HTML, vient du cache) de la déclaration, ou (None, False) si elle est introuvable."""
+    """(HTML, vient du cache) de la déclaration, ou (None, False) si elle est introuvable (404). Toute autre réponse
+    que 200 (5xx, 429...) lève ErreurSenat : le site est en panne, la page n'est pas « introuvable »."""
     fichier = dossier / f"{entree['uuid']}.html"
     if fichier.exists():
         return fichier.read_text(encoding="utf-8"), True
     reponse = session.request("GET", URL_DECLARATION.format(uuid=entree["uuid"]), headers=ENTETES, timeout=DELAI)
-    if reponse.status_code != 200:
+    if reponse.status_code == 404:
         return None, False
+    if reponse.status_code != 200:
+        raise ErreurSenat(f"page {entree['uuid']} du Sénat indisponible (code {reponse.status_code})")
     return reponse.text, False
 
 
