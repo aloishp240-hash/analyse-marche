@@ -8,7 +8,9 @@ Usage : python copie_matin.py [--force] [--dry-run]
 
 Le passage n'a lieu qu'une fois par jour ouvré, à partir de `copie.heure_paris` (heure de Paris). `copie/dernier_lancement.json`
 ({"jour": "AAAA-MM-JJ"}) garde le dernier passage complet. `copie/vus.json` est écrit en dernier : tout ce qui précède
-(copie, messages) est refait au passage suivant si le script s'arrête avant. Les secrets (SEC_CONTACT, ALPACA_*,
+(copie, messages) est refait au passage suivant si le script s'arrête avant. `copie/echecs_alpaca.json`
+({"de_suite": n}) compte les passages où Alpaca a répondu par une erreur : au 3e de suite, les achats sont seulement
+signalés et le passage est terminé (sans suspendre la copie). Les secrets (SEC_CONTACT, ALPACA_*,
 CLAUDE_CODE_OAUTH_TOKEN) ne sont jamais affichés ni écrits.
 """
 import argparse
@@ -32,12 +34,16 @@ SUIVIS = DOSSIER / "suivis.json"
 BILANS = DOSSIER / "bilans.json"
 DERNIER_LANCEMENT = DOSSIER / "dernier_lancement.json"
 VENTES_EN_ATTENTE = DOSSIER / "ventes_en_attente.json"
+ECHECS_ALPACA = DOSSIER / "echecs_alpaca.json"
+ECHECS_ALPACA_MAX = 3  # erreurs Alpaca de suite après lesquelles on avance quand même (achats seulement signalés)
 DOSSIER_COURS = nouveautes.DOSSIER_CACHE / "cours"
 JOURS_COURS = 10  # recul pour trouver le dernier cours
 COMPTE_DESACTIVE = "copie désactivée"
 MOTIF_DESACTIVE = "copie désactivée"
 MOTIF_SUSPENDUE = "copie suspendue"
 MOTIF_ESSAI = "essai à vide, aucun ordre passé"
+MOTIF_INDISPONIBLE = "Alpaca indisponible"
+MOTIF_DIRIGEANTS = "copie des dirigeants désactivée"
 
 
 class ErreurFichier(Exception):
@@ -138,17 +144,39 @@ def _compte(client):
     return f"{valeur:,.2f}".replace(",", " ").replace(".", ",") + " $ (compte paper)"
 
 
-def _motifs(achats, signales, etat, actif, dry_run):
+def _lire_echecs():
+    """Nombre d'erreurs Alpaca de suite ; 0 si le fichier manque ou est illisible."""
+    try:
+        n = _lire_json(ECHECS_ALPACA, {}).get("de_suite", 0)
+    except (ErreurFichier, AttributeError):
+        return 0
+    return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
+
+
+def _ecrire_echecs(n):
+    _ecrire_json(ECHECS_ALPACA, {"de_suite": n})
+
+
+def _copiables(achats, p):
+    """(achats à copier, achats de dirigeants écartés par le réglage `copie.dirigeants_copies`). Vrai par défaut ;
+    toute autre valeur que vrai (faux, texte, nombre) écarte les dirigeants : dans le doute, on ne copie pas."""
+    if p.get("dirigeants_copies", True) is True:
+        return list(achats), []
+    return ([op for op in achats if op.famille != "dirigeant"], [op for op in achats if op.famille == "dirigeant"])
+
+
+def _motifs(achats, signales, etat, actif, dry_run, ecartes=(), motif_defaut=MOTIF_SUSPENDUE):
     """{source_id: motif} des achats seulement signalés."""
     if not actif:
         return {op.source_id: MOTIF_DESACTIVE for op in achats}
     if dry_run:
         return {op.source_id: MOTIF_ESSAI for op in achats}
     motifs = {op.source_id: motif for op, motif in signales}
+    motifs.update({op.source_id: MOTIF_DIRIGEANTS for op in ecartes})
     copies = {pos["source_id"] for pos in etat["positions"] + etat["historique"]}
     for op in achats:
         if op.source_id not in motifs and op.source_id not in copies:
-            motifs[op.source_id] = MOTIF_SUSPENDUE  # copie suspendue : copier n'a rien tenté
+            motifs[op.source_id] = motif_defaut  # copie suspendue ou Alpaca injoignable : copier n'a rien tenté
     return motifs
 
 
@@ -217,24 +245,45 @@ def main(argv=None, maintenant=None):
     notes = list(notes) + ([note_cours] if note_cours else [])
     bilans = _lire_bilans()
     a_deposer, signales, etat = [], [], {"positions": [], "historique": []}
-    client, erreur_copie = None, None
+    client, erreur_copie, indisponible = None, None, False
     ventes_a_copier = _fusionner_ventes(en_attente, ventes) if actif else []
+    achats_copiables, ecartes = _copiables(achats, p)
 
     if actif and not dry_run:
+        precedents, erreur_alpaca, contexte = _lire_echecs(), None, "copie impossible"
         try:
             client = alpaca.Client()
-        except Exception as erreur:  # copier n'a pas tourné : rien n'est suspendu, aucun achat n'est étiqueté ainsi
-            detail = str(erreur)[:200] if isinstance(erreur, ErreurAlpaca) else type(erreur).__name__
-            return _arreter(f"client Alpaca impossible à créer, nouvel essai au prochain passage ({detail})", dry_run)
-        try:
-            plus, signales = copie_alpaca.copier(achats, ventes_a_copier, derniers_cours, client, p, aujourd_hui)
-            a_deposer += _textes_copier(plus)
         except ErreurAlpaca as erreur:
-            return _arreter(f"copie impossible, nouvel essai au prochain passage ({str(erreur)[:200]})", dry_run)
-        except Exception as erreur:  # copier a déjà suspendu la copie : on signale les achats
-            erreur_copie = type(erreur).__name__
+            erreur_alpaca, contexte = erreur, "client Alpaca impossible à créer"
+        except Exception as erreur:  # copier n'a pas tourné : rien n'est suspendu, aucun achat n'est étiqueté ainsi
+            return _arreter("client Alpaca impossible à créer, nouvel essai au prochain passage "
+                            f"({type(erreur).__name__})", dry_run)
+        if erreur_alpaca is None:
+            try:
+                plus, signales = copie_alpaca.copier(achats_copiables, ventes_a_copier, derniers_cours, client, p,
+                                                     aujourd_hui)
+                a_deposer += _textes_copier(plus)
+                if precedents:
+                    _ecrire_echecs(0)
+            except ErreurAlpaca as erreur:
+                erreur_alpaca = erreur
+            except Exception as erreur:  # copier a déjà suspendu la copie : on signale les achats
+                erreur_copie = type(erreur).__name__
+                a_deposer += _textes_copier(getattr(erreur, "messages", []))
+                a_deposer.append(messages.alerte(
+                    f"erreur inattendue pendant la copie ({erreur_copie}) : copie suspendue, achats seulement "
+                    "signalés"))
+        if erreur_alpaca is not None:
+            detail = str(erreur_alpaca)[:200]
+            a_deposer += _textes_copier(getattr(erreur_alpaca, "messages", []))  # sorties déjà faites, avant l'alerte
+            if precedents + 1 < ECHECS_ALPACA_MAX:
+                _ecrire_echecs(precedents + 1)
+                for texte in a_deposer:
+                    boite.deposer(texte)
+                return _arreter(f"{contexte}, nouvel essai au prochain passage ({detail})", dry_run)
+            indisponible = True
             a_deposer.append(messages.alerte(
-                f"erreur inattendue pendant la copie ({erreur_copie}) : copie suspendue, achats seulement signalés"))
+                f"Alpaca indisponible {ECHECS_ALPACA_MAX} fois de suite : achats seulement signalés ({detail})"))
         etat = copie_alpaca.charger_etat()
 
     if not actif:
@@ -242,9 +291,10 @@ def main(argv=None, maintenant=None):
     elif dry_run:
         compte = "non lu (essai à vide)"
     else:
-        compte = _compte(client) if erreur_copie is None else "indisponible"
+        compte = _compte(client) if erreur_copie is None and not indisponible else "indisponible"
     descriptions = {} if dry_run or not achats else redaction.decrire(achats)
-    motifs = _motifs(achats, signales, etat, actif, dry_run)
+    motifs = _motifs(achats, signales, etat, actif, dry_run, ecartes,
+                     MOTIF_INDISPONIBLE if indisponible else MOTIF_SUSPENDUE)
     textes = _textes_achats(achats, descriptions, bilans, compte, variations, motifs) + a_deposer
     if notes:
         liste = notes[0] if len(notes) == 1 else "\n" + "\n".join(f"• {n}" for n in notes)
@@ -259,12 +309,19 @@ def main(argv=None, maintenant=None):
     for texte in textes:
         boite.deposer(texte)
     if actif:
-        positions = {(pos["personne_id"], pos["ticker"]) for pos in etat["positions"]}
-        _ecrire_json(VENTES_EN_ATTENTE, [vers_dict(v) for v in ventes_a_copier
-                                         if (v.personne_id, v.ticker) in positions])
+        _ecrire_json(VENTES_EN_ATTENTE, [vers_dict(v) for v in ventes_a_copier if _a_vendre(v, etat["positions"])])
     nouveautes.enregistrer_vus(nouveaux_vus)
     _ecrire_json(DERNIER_LANCEMENT, {"jour": aujourd_hui.isoformat()})
-    return 1 if erreur_copie else 0  # passage complet, mais la copie s'est suspendue : l'exécution apparaît en échec
+    if indisponible:
+        _ecrire_echecs(0)
+    return 1 if erreur_copie or indisponible else 0  # passage complet, mais la copie s'est suspendue : l'exécution apparaît en échec
+
+
+def _a_vendre(vente, positions):
+    """Une vente reste en attente tant qu'une position de la même personne sur le même titre n'a pas été achetée
+    avant elle (une vente faite avant l'achat copié ne concerne pas cette position)."""
+    return any(pos["personne_id"] == vente.personne_id and pos["ticker"] == vente.ticker
+               and not copie_alpaca.vente_anterieure(pos, vente) for pos in positions)
 
 
 def _lire_bilans():

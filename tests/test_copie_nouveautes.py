@@ -719,6 +719,27 @@ def test_vus_json_illisible_leve_une_erreur(tmp_path, monkeypatch):
     assert (tmp_path / "vus.json").read_text() == "[1, 2]"  # rien n'est écrasé
 
 
+def test_vus_json_de_mauvaise_forme_leve_une_erreur(tmp_path, monkeypatch):
+    monkeypatch.setattr(nouveautes, "VUS", tmp_path / "vus.json")
+    formes = ['{"vus": 5}', '{"vus": null}', '{"vus": [[1], 2]}', '{"achats_dirigeants": 3}',
+              '{"achats_dirigeants": [1]}', '{"achats_dirigeants": [["a"]]}', '{"achats_dirigeants": null}',
+              '{"dernier_passage": 5}', '{"dernier_passage": "demain"}', '{"vus": {"a": {"b": 1}}}']
+    for contenu in formes:
+        (tmp_path / "vus.json").write_text(contenu)
+        with pytest.raises(nouveautes.ErreurVus):
+            charger_vus()
+        assert (tmp_path / "vus.json").read_text() == contenu  # rien n'est écrasé
+
+
+def test_vus_json_ancien_format_et_dates_vides_restent_lisibles(tmp_path, monkeypatch):
+    monkeypatch.setattr(nouveautes, "VUS", tmp_path / "vus.json")
+    (tmp_path / "vus.json").write_text('{"dernier_passage": null, "vus": ["chambre:1"], "achats_dirigeants": []}')
+    vus = charger_vus()
+    assert list(vus["vus"]) == ["chambre:1"] and vus["dernier_passage"] is None
+    (tmp_path / "vus.json").write_text('{}')
+    assert charger_vus() == vus_vide(None)
+
+
 def test_enregistrer_vus_est_atomique(tmp_path, monkeypatch):
     monkeypatch.setattr(nouveautes, "VUS", tmp_path / "vus.json")
     enregistrer_vus({"dernier_passage": "2026-10-19", "vus": {}, "achats_dirigeants": []})

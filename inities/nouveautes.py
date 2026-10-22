@@ -71,7 +71,11 @@ def charger_vus():
         raise ErreurVus(f"{VUS.name} illisible (JSON invalide) : à corriger ou à supprimer à la main") from erreur
     if not isinstance(vus, dict):
         raise ErreurVus(f"{VUS.name} illisible (objet JSON attendu) : à corriger ou à supprimer à la main")
-    return _copie_vus(vus)
+    try:
+        return _copie_vus(vus)
+    except (TypeError, ValueError, AttributeError) as erreur:
+        raise ErreurVus(f"{VUS.name} illisible (contenu de mauvaise forme) : "
+                        "à corriger ou à supprimer à la main") from erreur
 
 
 def enregistrer_vus(vus):
@@ -86,15 +90,27 @@ def enregistrer_vus(vus):
 
 
 def _copie_vus(vus, aujourd_hui=None):
-    """Copie au format dict ; l'ancien format liste est daté d'aujourd'hui."""
+    """Copie au format dict ; l'ancien format liste est daté d'aujourd'hui. Lève TypeError ou ValueError si le
+    contenu n'a pas la forme attendue (dates, dictionnaires, listes)."""
     brut = vus.get("vus", {})
     if isinstance(brut, dict):
-        jetons = {str(jeton): str(jour) for jeton, jour in brut.items()}
-    else:
+        if not all(isinstance(jour, str) for jour in brut.values()):
+            raise TypeError("dates des identifiants vus")
+        jetons = {str(jeton): jour for jeton, jour in brut.items()}
+    elif isinstance(brut, list):
         jour = (aujourd_hui or date.today()).isoformat()
-        jetons = {str(jeton): jour for jeton in brut}
-    return {"dernier_passage": vus.get("dernier_passage"), "vus": jetons,
-            "achats_dirigeants": [dict(a) for a in vus.get("achats_dirigeants", [])]}
+        jetons = {str(jeton): jour for jeton in brut if isinstance(jeton, (str, int))}
+        if len(jetons) != len(brut):
+            raise TypeError("identifiants vus")
+    else:
+        raise TypeError("vus")
+    dernier = vus.get("dernier_passage")
+    if dernier is not None:
+        date.fromisoformat(dernier)  # TypeError si ce n'est pas du texte, ValueError si la date est fausse
+    achats = vus.get("achats_dirigeants", [])
+    if not isinstance(achats, list) or not all(isinstance(a, dict) for a in achats):
+        raise TypeError("achats_dirigeants")
+    return {"dernier_passage": dernier, "vus": jetons, "achats_dirigeants": [dict(a) for a in achats]}
 
 
 def _purger(jetons, dernier_passage, aujourd_hui):

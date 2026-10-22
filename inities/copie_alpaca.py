@@ -193,10 +193,23 @@ def rapprocher(etat, client, p=None, aujourd_hui=None, messages=None):
     return etat, messages
 
 
+def vente_anterieure(position, vente):
+    """Vrai si la vente a été faite avant l'opération d'achat copiée (publiée tard, elle ne concerne pas cette
+    position). Faux si la date de l'achat n'est pas connue (position enregistrée avant ce champ)."""
+    achat = position.get("date_operation")
+    return bool(achat) and vente.date_operation < date.fromisoformat(achat)
+
+
+def _vente_concerne(position, v):
+    if v.sens != "vente" or v.personne_id != position["personne_id"] or v.ticker != position["ticker"]:
+        return False
+    if position.get("date_operation"):
+        return not vente_anterieure(position, v)
+    return v.date_publication >= date.fromisoformat(position["date_entree"])  # ancienne règle
+
+
 def _raison_sortie(position, ventes, aujourd_hui):
-    entree = date.fromisoformat(position["date_entree"])
-    if any(v.sens == "vente" and v.personne_id == position["personne_id"] and v.ticker == position["ticker"]
-           and v.date_publication >= entree for v in ventes):
+    if any(_vente_concerne(position, v) for v in ventes):
         return "vente"
     if date.fromisoformat(position["sortie_prevue"]) <= aujourd_hui:
         return "6 mois"
@@ -312,10 +325,17 @@ def _passer_oto(client, op, nombre, stop, id_client):
         return existant
 
 
-def entrees(etat, achats, derniers_cours, client, p, aujourd_hui=None, messages=None):
+def _deja_revendu(op, ventes):
+    """Vrai si la même personne a déjà vendu ce titre, avec une opération au moins aussi récente que l'achat."""
+    return any(v.sens == "vente" and v.personne_id == op.personne_id and v.ticker == op.ticker
+               and v.date_operation >= op.date_operation for v in ventes)
+
+
+def entrees(etat, achats, derniers_cours, client, p, aujourd_hui=None, messages=None, ventes=()):
     """Passe un ordre `oto` (achat au marché + stop à stop_pct sous le dernier cours) pour chaque achat copiable,
     dans l'ordre de priorité de la simulation. Renvoie (état, messages, achats seulement signalés avec leur
-    motif). Un ErreurAlpaca sur un ordre suspend la copie : les achats restants sont signalés, pas passés."""
+    motif). Un achat que la même personne a déjà revendu (`ventes`) n'est que signalé. Un ErreurAlpaca sur un
+    ordre suspend la copie : les achats restants sont signalés, pas passés."""
     jour = aujourd_hui or date.today()
     messages = [] if messages is None else messages
     signales = []
@@ -335,6 +355,8 @@ def entrees(etat, achats, derniers_cours, client, p, aujourd_hui=None, messages=
             signales.append((op, "titre déjà détenu"))
         elif op.ticker in sortis:
             signales.append((op, "titre sorti aujourd'hui"))
+        elif _deja_revendu(op, ventes):
+            signales.append((op, "déjà revendu"))
         elif len(etat["positions"]) >= p["positions_max"]:
             signales.append((op, f"plafond de {p['positions_max']} positions atteint"))
         elif not isinstance(cours, (int, float)) or not math.isfinite(cours) or cours <= 0:
@@ -354,7 +376,8 @@ def entrees(etat, achats, derniers_cours, client, p, aujourd_hui=None, messages=
             etat["positions"].append({
                 "ticker": op.ticker, "personne_id": op.personne_id, "source_id": op.source_id,
                 "id_ordre": ordre.get("id"), "id_stop": jambe.get("id") if jambe else None,
-                "date_entree": jour.isoformat(), "stop": stop, "quantite": nombre,
+                "date_entree": jour.isoformat(), "date_operation": op.date_operation.isoformat(),
+                "stop": stop, "quantite": nombre,
                 "sortie_prevue": (pd.Timestamp(jour) + pd.DateOffset(months=p["duree_max_mois"])).date().isoformat(),
                 "stop_recale": False})
             detenus.add(op.ticker)
@@ -375,7 +398,8 @@ def copier(achats, ventes, derniers_cours, client, p, aujourd_hui):
         if not suspendu():
             etat, _ = sorties(etat, ventes, aujourd_hui, client, messages=messages)
         if not suspendu():
-            etat, _, signales = entrees(etat, achats, derniers_cours, client, p, aujourd_hui, messages)
+            etat, _, signales = entrees(etat, achats, derniers_cours, client, p, aujourd_hui, messages,
+                                         ventes)
     except ErreurAlpaca as erreur:
         erreur.messages = messages  # sorties et stops déjà traités : à annoncer quand même
         raise

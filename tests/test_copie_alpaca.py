@@ -146,9 +146,10 @@ def achat(ticker="AAA", source="chambre:20035551:1", pub=AUJOURD_HUI - timedelta
                      montant_max=montant, source_id=source, details=details or {})
 
 
-def vente(ticker="AAA", pub=AUJOURD_HUI, personne=ELU):
+def vente(ticker="AAA", pub=AUJOURD_HUI, personne=ELU, operation=None):
     return Operation(famille="politicien", personne_id=personne, personne="Jean Dupont", ticker=ticker,
-                     sens="vente", date_operation=pub - timedelta(days=3), date_publication=pub, montant_min=1000.0,
+                     sens="vente", date_operation=operation or pub - timedelta(days=3), date_publication=pub,
+                     montant_min=1000.0,
                      montant_max=15000.0, source_id=f"chambre:99:{ticker}", details={})
 
 
@@ -183,7 +184,7 @@ def test_entree_passe_un_oto_avec_stop_85():
     assert etat["positions"] == [{
         "ticker": "AAA", "personne_id": ELU, "source_id": "chambre:20035551:1", "id_ordre": "ordre-1",
         "id_stop": "stop-1", "date_entree": "2026-10-21", "sortie_prevue": "2027-04-21", "stop_recale": False,
-        "stop": 85.0, "quantite": 3}]
+        "stop": 85.0, "quantite": 3, "date_operation": "2026-10-15"}]
     assert signales == [] and len(messages) == 1 and "AAA" in messages[0]
 
 
@@ -754,3 +755,60 @@ def test_vente_avant_execution_de_l_achat_sans_resultat():
     etat = {"positions": [position()], "historique": []}
     etat, messages = sorties(etat, [vente()], AUJOURD_HUI, client)
     assert "résultat n/d" in messages[0] and "AAA" in messages[0]
+
+
+# --- vente antérieure à l'achat, achat déjà revendu (P4) ---
+
+def test_vente_anterieure_a_l_achat_copie_est_ignoree():
+    client, etat = client_avec_position(date_operation="2026-10-10")
+    ancienne = vente(pub=AUJOURD_HUI, operation=date(2026, 10, 5))  # publiée tard, mais faite avant l'achat
+    etat, messages = sorties(etat, [ancienne], AUJOURD_HUI, client)
+    assert len(etat["positions"]) == 1 and messages == [] and client.appels_de("annuler") == []
+
+
+def test_vente_posterieure_a_l_achat_copie_sort_meme_publiee_avant_l_entree():
+    client, etat = client_avec_position(date_operation="2026-10-10", date_entree="2026-10-20")
+    vendue = vente(pub=date(2026, 10, 19), operation=date(2026, 10, 12))  # publiée avant notre entrée
+    etat, messages = sorties(etat, [vendue], AUJOURD_HUI, client)
+    assert etat["positions"] == [] and etat["historique"][0]["raison"] == "vente"
+
+
+def test_position_sans_date_d_operation_garde_l_ancienne_regle():
+    client, etat = client_avec_position()  # date_entree 2026-10-01, pas de date_operation
+    avant = vente(pub=date(2026, 9, 30), operation=date(2026, 9, 28))
+    etat, _ = sorties(etat, [avant], AUJOURD_HUI, client)
+    assert len(etat["positions"]) == 1
+    apres = vente(pub=date(2026, 10, 2), operation=date(2026, 9, 28))
+    etat, _ = sorties(etat, [apres], AUJOURD_HUI, client)
+    assert etat["positions"] == []
+
+
+def test_vente_anterieure_reconnue():
+    assert copie_alpaca.vente_anterieure(position(date_operation="2026-10-10"), vente(operation=date(2026, 10, 9)))
+    assert not copie_alpaca.vente_anterieure(position(date_operation="2026-10-10"), vente(operation=date(2026, 10, 10)))
+    assert not copie_alpaca.vente_anterieure(position(), vente(operation=date(2020, 1, 1)))  # date inconnue
+
+
+def test_achat_deja_revendu_dans_le_meme_lot_est_signale():
+    client = FauxClient()
+    revente = vente(operation=date(2026, 10, 18))  # l'achat date du 15 octobre
+    etat, messages, signales = entrees(etat_vide(), [achat()], {"AAA": 100.0}, client, P, AUJOURD_HUI,
+                                       ventes=[revente])
+    assert client.appels_de("passer_oto") == [] and etat["positions"] == []
+    assert [(op.ticker, motif) for op, motif in signales] == [("AAA", "déjà revendu")]
+    assert not copie_alpaca.SUSPENSION.exists()
+
+
+def test_vente_d_une_autre_personne_ou_anterieure_n_empeche_pas_l_achat():
+    client = FauxClient()
+    ventes = [vente(operation=date(2026, 10, 10)), vente(personne="politicien:chambre:Autre|X|CA-02"),
+              vente(ticker="ZZZ")]
+    etat, _, signales = entrees(etat_vide(), [achat()], {"AAA": 100.0}, client, P, AUJOURD_HUI, ventes=ventes)
+    assert len(client.appels_de("passer_oto")) == 1 and signales == []
+
+
+def test_copier_passe_les_ventes_aux_entrees():
+    client = FauxClient()
+    messages, signales = copier([achat()], [vente(operation=date(2026, 10, 18))], {"AAA": 100.0}, client, P,
+                                AUJOURD_HUI)
+    assert [motif for _, motif in signales] == ["déjà revendu"] and client.appels_de("passer_oto") == []

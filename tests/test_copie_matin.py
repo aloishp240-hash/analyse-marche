@@ -18,13 +18,14 @@ AUJOURD_HUI = MERCREDI.date()
 SECRET = "jeton-ultra-secret-123"
 
 
-def op(ticker="AAA", sens="achat", source="chambre:1:1", personne=ELU, date_operation=date(2026, 10, 14)):
-    return Operation("politicien", personne, "Jonathan Jackson", ticker, sens, date_operation, date(2026, 10, 19),
+def op(ticker="AAA", sens="achat", source="chambre:1:1", personne=ELU, date_operation=date(2026, 10, 14),
+       famille="politicien"):
+    return Operation(famille, personne, "Jonathan Jackson", ticker, sens, date_operation, date(2026, 10, 19),
                      50001.0, 100000.0, source)
 
 
-def config(actif=False):
-    return {"copie": {"alpaca_actif": actif, "heure_paris": "08:00", "descriptions_max": 5}}
+def config(actif=False, **reglages):
+    return {"copie": {"alpaca_actif": actif, "heure_paris": "08:00", "descriptions_max": 5, **reglages}}
 
 
 class FauxClient:
@@ -67,6 +68,7 @@ def monde(tmp_path, monkeypatch):
     monkeypatch.setattr(copie_matin, "BILANS", dossier / "bilans.json")
     monkeypatch.setattr(copie_matin, "DERNIER_LANCEMENT", dossier / "dernier_lancement.json")
     monkeypatch.setattr(copie_matin, "VENTES_EN_ATTENTE", dossier / "ventes_en_attente.json")
+    monkeypatch.setattr(copie_matin, "ECHECS_ALPACA", dossier / "echecs_alpaca.json")
     monkeypatch.setattr(nouveautes, "VUS", dossier / "vus.json")
     monkeypatch.setattr(copie_alpaca, "POSITIONS", dossier / "positions.json")
     monkeypatch.setattr(copie_alpaca, "SUSPENSION", dossier / "suspension.json")
@@ -108,8 +110,8 @@ def monde(tmp_path, monkeypatch):
     return monde
 
 
-def regler(monkeypatch, actif):
-    monkeypatch.setattr(copie_matin, "charger_config", lambda: config(actif))
+def regler(monkeypatch, actif, **reglages):
+    monkeypatch.setattr(copie_matin, "charger_config", lambda: config(actif, **reglages))
 
 
 def ecrits(monde):
@@ -308,7 +310,7 @@ def test_erreur_alpaca_ne_depose_aucun_achat_et_n_ecrit_pas_vus(monde, monkeypat
     assert len(monde.deposes) == 1
     assert monde.deposes[0].startswith("⚠️ COPIE D'INITIÉS") and "Alpaca injoignable" in monde.deposes[0]
     assert "NOUVEL ACHAT" not in monde.deposes[0]
-    assert ecrits(monde) == ["suivis.json"]
+    assert ecrits(monde) == ["echecs_alpaca.json", "suivis.json"]
 
 
 def test_client_alpaca_impossible_a_creer(monde, monkeypatch):
@@ -322,7 +324,7 @@ def test_client_alpaca_impossible_a_creer(monde, monkeypatch):
     monde.resultat = ([op()], [], [], monde.nouveaux_vus)
     assert copie_matin.main(["--force"], maintenant=MERCREDI) == 1
     assert "ALPACA_API_KEY_ID manquant" in monde.deposes[0] and "NOUVEL ACHAT" not in monde.deposes[0]
-    assert ecrits(monde) == ["suivis.json"]
+    assert ecrits(monde) == ["echecs_alpaca.json", "suivis.json"]
 
 
 def test_exception_a_la_creation_du_client(monde, monkeypatch, capsys):
@@ -372,3 +374,166 @@ def test_client_sec_sans_contact(monde, monkeypatch, capsys):
     monkeypatch.setattr(sec, "ClientSec", lever)
     assert copie_matin.main(["--force"], maintenant=MERCREDI) == 1
     assert "SEC_CONTACT manquant" in monde.deposes[0] and ecrits(monde) == ["suivis.json"]
+
+
+# --- Alpaca indisponible plusieurs fois de suite (I2) ---
+
+def echecs(monde):
+    return json.loads((monde.dossier / "echecs_alpaca.json").read_text())
+
+
+def test_premier_echec_alpaca_compte_et_n_ecrit_ni_vus_ni_dernier_lancement(monde, monkeypatch):
+    regler(monkeypatch, True)
+    monde.resultat = ([op()], [], [], monde.nouveaux_vus)
+    monkeypatch.setattr(copie_alpaca, "copier", Copieur(erreur=ErreurAlpaca("Alpaca injoignable")))
+    assert copie_matin.main(["--force"], maintenant=MERCREDI) == 1
+    assert echecs(monde) == {"de_suite": 1}
+    assert "vus.json" not in ecrits(monde) and "dernier_lancement.json" not in ecrits(monde)
+    assert len(monde.deposes) == 1 and "NOUVEL ACHAT" not in monde.deposes[0]
+
+
+def test_deuxieme_echec_alpaca_compte_encore(monde, monkeypatch):
+    regler(monkeypatch, True)
+    (monde.dossier / "echecs_alpaca.json").write_text('{"de_suite": 1}')
+    monkeypatch.setattr(copie_alpaca, "copier", Copieur(erreur=ErreurAlpaca("Alpaca injoignable")))
+    assert copie_matin.main(["--force"], maintenant=MERCREDI) == 1
+    assert echecs(monde) == {"de_suite": 2} and "vus.json" not in ecrits(monde)
+
+
+def test_troisieme_echec_alpaca_signale_les_achats_et_avance(monde, monkeypatch):
+    regler(monkeypatch, True)
+    (monde.dossier / "echecs_alpaca.json").write_text('{"de_suite": 2}')
+    vente_gardee = op("OLD", "vente", "chambre:7:1")
+    (monde.dossier / "ventes_en_attente.json").write_text(json.dumps([vers_dict(vente_gardee)]))
+    monde.resultat = ([op()], [], [], monde.nouveaux_vus)
+    copieur = Copieur(erreur=ErreurAlpaca("Alpaca injoignable"),
+                      positions=[{"personne_id": ELU, "ticker": "OLD", "source_id": "x:1"}])
+    monkeypatch.setattr(copie_alpaca, "copier", copieur)
+    assert copie_matin.main(["--force"], maintenant=MERCREDI) == 1
+    textes = "\n".join(monde.deposes)
+    assert "seulement signalé (Alpaca indisponible)" in textes and "NOUVEL ACHAT" in textes
+    assert "Alpaca indisponible 3 fois de suite : achats seulement signalés" in textes
+    assert echecs(monde) == {"de_suite": 0}
+    assert json.loads((monde.dossier / "vus.json").read_text()) == monde.nouveaux_vus
+    assert json.loads((monde.dossier / "dernier_lancement.json").read_text()) == {"jour": "2026-10-21"}
+    restantes = json.loads((monde.dossier / "ventes_en_attente.json").read_text())
+    assert [v["source_id"] for v in restantes] == ["chambre:7:1"]  # la vente attend toujours
+    assert not copie_alpaca.SUSPENSION.exists()
+
+
+def test_troisieme_echec_a_la_creation_du_client(monde, monkeypatch):
+    regler(monkeypatch, True)
+    (monde.dossier / "echecs_alpaca.json").write_text('{"de_suite": 2}')
+
+    def lever():
+        raise ErreurAlpaca("ALPACA_API_KEY_ID manquant")
+
+    monkeypatch.setattr(alpaca, "Client", lever)
+    monde.resultat = ([op()], [], [], monde.nouveaux_vus)
+    assert copie_matin.main(["--force"], maintenant=MERCREDI) == 1
+    textes = "\n".join(monde.deposes)
+    assert "seulement signalé (Alpaca indisponible)" in textes and "Alpaca indisponible 3 fois de suite" in textes
+    assert "Compte fictif : indisponible" in textes
+    assert echecs(monde) == {"de_suite": 0} and "dernier_lancement.json" in ecrits(monde)
+
+
+def test_copie_reussie_remet_le_compteur_a_zero(monde, monkeypatch):
+    regler(monkeypatch, True)
+    (monde.dossier / "echecs_alpaca.json").write_text('{"de_suite": 2}')
+    monkeypatch.setattr(copie_alpaca, "copier", Copieur())
+    assert copie_matin.main(["--force"], maintenant=MERCREDI) == 0
+    assert echecs(monde) == {"de_suite": 0}
+
+
+def test_compteur_illisible_compte_pour_zero(monde, monkeypatch):
+    regler(monkeypatch, True)
+    (monde.dossier / "echecs_alpaca.json").write_text('[1, 2')
+    monkeypatch.setattr(copie_alpaca, "copier", Copieur(erreur=ErreurAlpaca("Alpaca injoignable")))
+    assert copie_matin.main(["--force"], maintenant=MERCREDI) == 1
+    assert echecs(monde) == {"de_suite": 1}
+
+
+def test_dry_run_ne_touche_pas_au_compteur(monde, monkeypatch):
+    regler(monkeypatch, True)
+    (monde.dossier / "echecs_alpaca.json").write_text('{"de_suite": 2}')
+    assert copie_matin.main(["--force", "--dry-run"], maintenant=MERCREDI) == 0
+    assert echecs(monde) == {"de_suite": 2}
+
+
+# --- messages de sortie déposés avant l'alerte (M1) ---
+
+def test_messages_de_sortie_deposes_avant_l_alerte_d_erreur_alpaca(monde, monkeypatch):
+    regler(monkeypatch, True)
+    erreur = ErreurAlpaca("Alpaca injoignable")
+    erreur.messages = ["📤 VENTE — AAA : stop exécuté\nEntrée 100.00 $, sortie 84.00 $ : -16.0 %"]
+    monkeypatch.setattr(copie_alpaca, "copier", Copieur(erreur=erreur))
+    assert copie_matin.main(["--force"], maintenant=MERCREDI) == 1
+    assert monde.deposes[0].startswith("📤 VENTE — AAA")
+    assert monde.deposes[1].startswith("⚠️ COPIE D'INITIÉS") and "Alpaca injoignable" in monde.deposes[1]
+
+
+def test_messages_de_sortie_deposes_aussi_apres_une_exception_inattendue(monde, monkeypatch):
+    regler(monkeypatch, True)
+    erreur = RuntimeError("boum")
+    erreur.messages = ["📤 VENTE — AAA : stop exécuté (résultat n/d)"]
+    monde.resultat = ([op()], [], [], monde.nouveaux_vus)
+    monkeypatch.setattr(copie_alpaca, "copier", Copieur(erreur=erreur))
+    assert copie_matin.main(["--force"], maintenant=MERCREDI) == 1
+    assert "📤 VENTE — AAA : stop exécuté (résultat n/d)" in monde.deposes
+
+
+# --- copie des dirigeants (I3) ---
+
+def test_dirigeant_copie_par_defaut(monde, monkeypatch):
+    regler(monkeypatch, True)
+    copieur = Copieur()
+    monkeypatch.setattr(copie_alpaca, "copier", copieur)
+    dirigeant = op("DDD", source="form4:0001-26-000001:1", personne="dirigeant:1", famille="dirigeant")
+    monde.resultat = ([dirigeant, op()], [], [], monde.nouveaux_vus)
+    copie_matin.main(["--force"], maintenant=MERCREDI)
+    assert [a.ticker for a in copieur.appels[0]["achats"]] == ["DDD", "AAA"]
+
+
+def test_dirigeants_non_copies_si_le_reglage_est_faux(monde, monkeypatch):
+    regler(monkeypatch, True, dirigeants_copies=False)
+    copieur = Copieur()
+    monkeypatch.setattr(copie_alpaca, "copier", copieur)
+    dirigeant = op("DDD", source="form4:0001-26-000001:1", personne="dirigeant:1", famille="dirigeant")
+    monde.resultat = ([dirigeant, op()], [], [], monde.nouveaux_vus)
+    copie_matin.main(["--force"], maintenant=MERCREDI)
+    assert [a.ticker for a in copieur.appels[0]["achats"]] == ["AAA"]  # l'élu reste copié
+    assert len(monde.deposes) == 2  # les deux achats sont décrits et envoyés
+    envoye = next(t for t in monde.deposes if "DDD" in t)
+    assert "seulement signalé (copie des dirigeants désactivée)" in envoye
+    assert not any("copie des dirigeants" in t for t in monde.deposes if "AAA" in t)
+
+
+def test_reglage_dirigeants_douteux_ne_copie_pas(monde, monkeypatch):
+    regler(monkeypatch, True, dirigeants_copies="non")
+    copieur = Copieur()
+    monkeypatch.setattr(copie_alpaca, "copier", copieur)
+    dirigeant = op("DDD", source="form4:0001-26-000001:1", personne="dirigeant:1", famille="dirigeant")
+    monde.resultat = ([dirigeant], [], [], monde.nouveaux_vus)
+    copie_matin.main(["--force"], maintenant=MERCREDI)
+    assert copieur.appels[0]["achats"] == []
+    assert "copie des dirigeants désactivée" in monde.deposes[0]
+
+
+# --- ventes en attente antérieures à l'achat (P4) ---
+
+def test_vente_anterieure_a_l_achat_retiree_des_ventes_en_attente(monde, monkeypatch):
+    regler(monkeypatch, True)
+    avant = op("OLD", "vente", "chambre:7:1", date_operation=date(2026, 10, 5))
+    apres = op("OLD", "vente", "chambre:8:1", date_operation=date(2026, 10, 15))
+    (monde.dossier / "ventes_en_attente.json").write_text(json.dumps([vers_dict(avant), vers_dict(apres)]))
+    copieur = Copieur(positions=[{"personne_id": ELU, "ticker": "OLD", "source_id": "x:1",
+                                  "date_operation": "2026-10-10"}])
+    monkeypatch.setattr(copie_alpaca, "copier", copieur)
+    copie_matin.main(["--force"], maintenant=MERCREDI)
+    restantes = json.loads((monde.dossier / "ventes_en_attente.json").read_text())
+    assert [v["source_id"] for v in restantes] == ["chambre:8:1"]
+
+
+def test_reglage_dirigeants_copies_present_dans_config():
+    from commun import charger_config
+    assert charger_config()["copie"]["dirigeants_copies"] is True
