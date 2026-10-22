@@ -1,0 +1,38 @@
+{
+  "jour": "2026-10-22",
+  "session_reussie": false,
+  "candidats": [
+    {
+      "ticker": "ADI",
+      "nom": "Analog Devices",
+      "configuration": "A",
+      "cloture": 385.76,
+      "entree": 382.47,
+      "stop": 362.75,
+      "objectif": 421.92,
+      "atr": 13.15,
+      "mm50": 384.1,
+      "date_resultats": "2026-11-24",
+      "avis_claude": null,
+      "motif_claude": null,
+      "ordre_cree": false,
+      "id_ordre": null,
+      "refus_code": []
+    }
+  ],
+  "incoherences": [
+    "ADI : aucun avis de Claude dans le compte rendu"
+  ],
+  "refus_hors_candidats": [],
+  "fermetures": 0,
+  "cout": {
+    "tours": 1,
+    "duree_s": 0,
+    "cout_usd": 0,
+    "WebSearch": 0,
+    "WebFetch": 0,
+    "Bash": 0,
+    "Skill": 0
+  },
+  "sources": []
+}
