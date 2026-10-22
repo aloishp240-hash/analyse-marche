@@ -7,6 +7,7 @@ description.
 """
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import agent
@@ -59,14 +60,22 @@ def _description(brut):
     description = {}
     for cle in CHAMPS:
         valeur = brut.get(cle)
-        valeur = nettoyer_champ(valeur) if isinstance(valeur, str) else ""
+        valeur = nettoyer_champ(valeur, une_ligne=True) if isinstance(valeur, str) else ""
         if valeur:
             description[cle] = valeur
     pistes = brut.get("pistes")
     if isinstance(pistes, list):
         pistes = [nettoyer_champ(p, une_ligne=True) for p in pistes if isinstance(p, str)]
-        description["pistes"] = [p for p in pistes if p][:PISTES_MAX]
+        pistes = [p for p in pistes if p][:PISTES_MAX]
+        if pistes:
+            description["pistes"] = pistes
     return description
+
+
+def _echec(motif):
+    """Une ligne sur stderr : le motif seul, jamais l'environnement ni la sortie de claude."""
+    print(f"Descriptions de Claude indisponibles : {motif}", file=sys.stderr)
+    return {}
 
 
 def decrire(achats, duree_max_s=900):
@@ -78,13 +87,13 @@ def decrire(achats, duree_max_s=900):
         resultat = subprocess.run(commande(consigne(achats)), timeout=duree_max_s, capture_output=True, text=True,
                                   env=environnement())
         if resultat.returncode != 0:
-            return {}
+            return _echec(f"code de retour {resultat.returncode}")
         final, _, _ = agent.lire_flux(resultat.stdout)
         reponse = _dernier_json(final) if isinstance(final, str) else None
         if not isinstance(reponse, dict):
-            return {}
+            return _echec("aucun JSON exploitable dans la réponse")
         identifiants = {op.source_id for op in achats}
         descriptions = {i: _description(brut) for i, brut in reponse.items() if i in identifiants}
         return {i: d for i, d in descriptions.items() if d}
-    except Exception:
-        return {}
+    except Exception as exception:
+        return _echec(type(exception).__name__)

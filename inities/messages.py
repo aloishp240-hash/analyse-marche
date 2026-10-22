@@ -5,18 +5,22 @@ retirés, textes bornés. Les prix, quantités et stops viennent toujours du cod
 """
 import re
 
-from court_terme.validation import nettoyer
+from court_terme.validation import CONTROLE, nettoyer
 from inities.modele import delai
 
 LONGUEUR_MAX = 600
 PISTES_MAX = 3
-# Un nombre d'actions écrit par Claude pourrait passer pour un ordre : on le retire
-QUANTITE = re.compile(r"\b\d[\d\s.,]*\s*(?:actions?|parts|shares)\b", re.IGNORECASE)
+# Un nombre d'actions écrit par Claude pourrait passer pour un ordre : on le retire (« 1000 », « 1 000 », « 2,500 »)
+QUANTITE = re.compile(r"\b\d+(?:[ \u00a0\u202f,]\d{3})*\s*(?:actions?|shares?|stocks?)\b", re.IGNORECASE)
 
 
 def nettoyer_champ(texte, une_ligne=False):
-    """Texte venu de Claude : sans caractère de contrôle, lien ni nombre d'actions, borné à 600 caractères."""
-    return nettoyer(QUANTITE.sub("[quantité retirée]", texte), longueur_max=LONGUEUR_MAX, une_ligne=une_ligne)
+    """Texte venu de Claude : sans caractère de contrôle, lien ni nombre d'actions, borné à 600 caractères.
+
+    Les caractères invisibles sont retirés avant la recherche d'un nombre d'actions : « 1000 ac<invisible>tions » ne passe pas.
+    """
+    texte = QUANTITE.sub("[quantité retirée]", CONTROLE.sub("", texte))
+    return nettoyer(texte, longueur_max=LONGUEUR_MAX, une_ligne=une_ligne)
 
 
 def _nombre(valeur):
@@ -78,17 +82,20 @@ def achat(op, description, bilan, compte, variation_pct):
     lignes.append("Variation depuis leur achat : " + ("indisponible" if variation_pct is None
                                                       else _pourcentage(variation_pct)))
     lignes.append("")
-    if description:
-        for titre, cle in (("Contexte", "contexte"), ("Société", "societe"), ("Actualités", "actualites")):
-            valeur = nettoyer_champ(description.get(cle) or "")
-            if valeur:
-                lignes.append(f"{titre} : {valeur}")
-        pistes = [nettoyer_champ(p, une_ligne=True) for p in (description.get("pistes") or []) if isinstance(p, str)]
-        pistes = [p for p in pistes if p][:PISTES_MAX]
-        if pistes:
-            lignes += ["", "Pistes possibles (hypothèses de Claude, pas des faits) :"] + [f"• {p}" for p in pistes]
-    else:
+    lignes_faits = len(lignes)
+    description = description if isinstance(description, dict) else {}
+    for titre, cle in (("Contexte", "contexte"), ("Société", "societe"), ("Actualités", "actualites")):
+        valeur = description.get(cle)
+        valeur = nettoyer_champ(valeur, une_ligne=True) if isinstance(valeur, str) else ""
+        if valeur:
+            lignes.append(f"{titre} : {valeur}")
+    pistes = description.get("pistes")
+    pistes = [nettoyer_champ(p, une_ligne=True) for p in pistes if isinstance(p, str)] if isinstance(pistes, list) else []
+    pistes = [p for p in pistes if p][:PISTES_MAX]
+    if len(lignes) == lignes_faits and not pistes:
         lignes.append("(description indisponible)")
+    if pistes:
+        lignes += ["", "Pistes possibles (hypothèses de Claude, pas des faits) :"] + [f"• {p}" for p in pistes]
     lignes += ["", _bilan(bilan), f"Compte fictif : {compte}", "", "Pas un conseil financier."]
     return "\n".join(lignes)
 

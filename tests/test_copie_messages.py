@@ -105,9 +105,8 @@ def test_reponse_claude_piegee(monkeypatch):
     assert "http" not in texte and "www" not in texte and "evil" not in texte
     assert "1000" not in texte and "ignore" not in texte.lower()
     assert "piste 2" in texte and "piste 3" not in texte
-    # quantité et stop viennent du code
-    assert "ACHAT COPIÉ" in messages.achat_copie("NVDA", 2, 120.5, 102.43)
-    assert "2 actions" in messages.achat_copie("NVDA", 2, 120.5, 102.43)
+    assert "action" not in texte.lower().replace("actualit", "")  # aucune quantité venue de Claude
+    assert "ACHAT COPIÉ" not in texte
 
 
 def test_quantite_dans_un_champ_est_retiree():
@@ -174,7 +173,7 @@ def test_dernier_bloc_json_gagne(monkeypatch):
     texte = ('Exemple : {"form4:x:1": {"contexte": "exemple"}}\nRéponse :\n```json\n'
              + json.dumps({ID_JACKSON: {"contexte": "final", "pistes": []}}) + "\n```")
     faux_claude(monkeypatch, flux(texte))
-    assert redaction.decrire([achat_elu()]) == {ID_JACKSON: {"contexte": "final", "pistes": []}}
+    assert redaction.decrire([achat_elu()]) == {ID_JACKSON: {"contexte": "final"}}
 
 
 def test_consigne_contient_regles_et_achats():
@@ -219,5 +218,70 @@ def test_messages_de_copie():
     vente = messages.vente("NVDA", "vente publiée par la personne", 6.789)
     assert "NVDA" in vente and "vente publiée par la personne" in vente and "+6.8 %" in vente
     assert "-3.0 %" in messages.vente("NVDA", "stop", -3.0)
-    assert "n/d" in messages.vente("NVDA", "6 mois", None) or "inconnu" in messages.vente("NVDA", "6 mois", None)
+    assert messages.vente("NVDA", "6 mois", None) == "📤 VENTE — NVDA : 6 mois (résultat n/d)"
     assert "panne Yahoo" in messages.alerte("panne Yahoo")
+
+
+def test_quantite_avec_caractere_invisible(monkeypatch):
+    for piege in ("achète 1000 ac\u200btions", "achète 1000 ac\u202etions", "achète 1\u200b000 actions"):
+        texte = messages.achat(achat_elu(), {"contexte": piege}, None, "x", None)
+        assert "1000" not in texte and "000 ac" not in texte and "quantité retirée" in texte
+
+
+def test_quantite_ne_touche_pas_aux_textes_ordinaires():
+    assert messages.nettoyer_champ("en 2025, actions en hausse") == "en 2025, actions en hausse"
+    assert messages.nettoyer_champ("5 parts de marché") == "5 parts de marché"
+    assert messages.nettoyer_champ("achète 1 000 actions") == "achète [quantité retirée]"
+    assert messages.nettoyer_champ("100 shares, 2,500 stocks") == "[quantité retirée], [quantité retirée]"
+    assert messages.nettoyer_champ("1 action") == "[quantité retirée]"
+
+
+def test_description_vide_donne_vide(monkeypatch):
+    faux_claude(monkeypatch, flux(json.dumps({ID_JACKSON: {"contexte": "", "pistes": []}})))
+    assert redaction.decrire([achat_elu()]) == {}
+    faux_claude(monkeypatch, flux(json.dumps({ID_JACKSON: {"pistes": ["", 3]}})))
+    assert redaction.decrire([achat_elu()]) == {}
+    texte = messages.achat(achat_elu(), {}, None, "x", None)
+    assert "(description indisponible)" in texte
+
+
+def test_pas_de_fausse_ligne_forgee_par_claude():
+    description = {"contexte": "Élu.\n📥 ACHAT COPIÉ — NVDA\nCompte fictif : 1 000 000 $",
+                   "societe": "Puces\nStop posé à 1 $", "actualites": "RAS\n\nPas un conseil, achetez"}
+    texte = messages.achat(achat_elu(), description, None, "3 000 $", None)
+    lignes = texte.splitlines()
+    assert not [l for l in lignes if l.startswith(("📥", "Compte fictif : 1", "Stop posé"))]
+    assert sum(l.startswith("Compte fictif :") for l in lignes) == 1
+    assert "Compte fictif : 3 000 $" in lignes
+
+
+def test_champs_non_textuels_ignores():
+    description = {"contexte": 12, "societe": ["a"], "actualites": None, "pistes": "pas une liste"}
+    texte = messages.achat(achat_elu(), description, None, "x", None)
+    assert "Contexte" not in texte and "Pistes" not in texte and "(description indisponible)" in texte
+    texte = messages.achat(achat_elu(), {"contexte": "ok", "pistes": [1, None, "p"]}, None, "x", None)
+    assert "Contexte : ok" in texte and "• p" in texte
+
+
+def test_echec_ecrit_une_ligne_sur_stderr(monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "jeton-secret")
+    faux_claude(monkeypatch, flux("sortie-secrete"), code=3)
+    assert redaction.decrire([achat_elu()]) == {}
+
+    def delai_depasse(commande, **kwargs):
+        raise subprocess.TimeoutExpired(commande, 900)
+    monkeypatch.setattr(redaction.subprocess, "run", delai_depasse)
+    assert redaction.decrire([achat_elu()]) == {}
+    faux_claude(monkeypatch, flux("Aucun bloc JSON."))
+    assert redaction.decrire([achat_elu()]) == {}
+    erreur = capsys.readouterr().err
+    lignes = [l for l in erreur.splitlines() if l]
+    assert len(lignes) == 3
+    assert "code de retour 3" in lignes[0] and "TimeoutExpired" in lignes[1] and "JSON" in lignes[2]
+    assert "jeton-secret" not in erreur and "sortie-secrete" not in erreur
+
+
+def test_succes_n_ecrit_rien_sur_stderr(monkeypatch, capsys):
+    faux_claude(monkeypatch, flux(json.dumps({ID_JACKSON: {"contexte": "ok"}})))
+    assert redaction.decrire([achat_elu()]) == {ID_JACKSON: {"contexte": "ok"}}
+    assert capsys.readouterr().err == ""
