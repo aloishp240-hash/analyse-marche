@@ -1,24 +1,8 @@
 {
-  "jour": "2026-10-22",
-  "donnees_au": "2026-10-22",
+  "jour": "2026-10-23",
+  "donnees_au": "2026-10-23",
   "entrees_bloquees": [],
   "candidats_non_proposes": [],
   "titres_ecartes": {},
-  "candidats": [
-    {
-      "ticker": "ADI",
-      "configuration": "A",
-      "cloture": 385.76,
-      "atr": 13.15,
-      "rsi": 43.8,
-      "mm50": 384.1,
-      "force_relative": 0.78,
-      "entree": 382.47,
-      "stop": 362.75,
-      "objectif": 421.92,
-      "industrie": "Semiconductors",
-      "nom": "Analog Devices",
-      "date_resultats": "2026-11-24"
-    }
-  ]
+  "candidats": []
 }
