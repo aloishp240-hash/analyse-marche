@@ -21,6 +21,16 @@ class Operation:
 
 _PREFIXE_BOURSE = re.compile(r"(?:NYSE|NASDAQ)\s*:\s*")
 _TICKER_VALIDE = re.compile(r"[A-Z]{1,5}(?:[.-][A-Z]{1,2})?")
+_SANS_TICKER = re.compile(r"\[?\s*(?:NONE|N/?A|N\.A\.?|-+)?\s*\]?")
+_FONDS_COMMUN = re.compile(r"[A-Z]{4}X")  # 5e lettre X : symbole Nasdaq réservé aux fonds communs
+
+
+def non_cote(texte):
+    """Vrai si l'opération porte sur un titre sans marché : société non cotée (« NONE », « N/A », vide...) ou fonds
+    commun (CRAFX). Rien à copier ni à signaler."""
+    if not isinstance(texte, str) or _SANS_TICKER.fullmatch(texte.strip().upper()):
+        return True
+    return _FONDS_COMMUN.fullmatch(nettoyer_ticker(texte) or "") is not None
 
 
 def nettoyer_ticker(texte):

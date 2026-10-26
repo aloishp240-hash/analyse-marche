@@ -315,6 +315,14 @@ def test_achat_hors_univers_ecarte_et_compte(tmp_path, marche):
     assert vus["dernier_passage"] == "2026-10-20"  # dépôt lu : le jour est passé
 
 
+def test_achats_hors_univers_comptes_par_ticker(tmp_path, marche, monkeypatch):
+    marche.actions.update({"NXG": 1e6, "RENT": 1e6})
+    ops = [operation("fonds", "fonds:1135730", t, source=f"13f:ACC1:{i}") for i, t in enumerate(["RENT", "NXG", "RENT"])]
+    monkeypatch.setattr(fonds, "telecharger", lambda *a, **k: (ops, 0))
+    _, _, notes, _ = passer(tmp_path, SUIVIS_FONDS, vus_vide())
+    assert "3 achat(s) hors univers (capitalisation sous le seuil : NXG, RENT ×2)" in notes
+
+
 def test_nombre_d_actions_inconnu_n_est_ni_hors_univers_ni_vu(tmp_path, marche):
     # DDOG n'a pas de nombre d'actions alors que d'autres titres du même appel en ont : sa déclaration est relue
     marche.actions["DDOG"] = None
@@ -672,12 +680,32 @@ def test_echec_sur_un_fonds_non_suivi_est_sans_effet(tmp_path, marche, monkeypat
 # --- tickers ---
 
 def test_ticker_illisible_ignore_et_compte(tmp_path, marche, monkeypatch):
-    ops = [operation("fonds", "fonds:1135730", "N/A", source="13f:ACC1:AAA"),
+    ops = [operation("fonds", "fonds:1135730", "LEN, LEN.B", source="13f:ACC1:AAA"),
            operation("fonds", "fonds:1135730", "nyse: ibm", source="13f:ACC1:BBB")]
     monkeypatch.setattr(fonds, "telecharger", lambda *a, **k: (ops, 0))
     achats, _, notes, _ = passer(tmp_path, SUIVIS_FONDS, vus_vide())
     assert [o.ticker for o in achats] == ["IBM"]
     assert "1 opération(s) ignorée(s) : ticker illisible" in notes
+
+
+@pytest.mark.parametrize("brut", ["[NONE]", "None", "N/A", "n.a.", "-", "", None])
+def test_societe_non_cotee_ecartee_sans_note(tmp_path, marche, monkeypatch, brut):
+    ops = [operation("fonds", "fonds:1135730", brut, source="13f:ACC1:AAA"),
+           operation("fonds", "fonds:1135730", "IBM", source="13f:ACC1:BBB")]
+    monkeypatch.setattr(fonds, "telecharger", lambda *a, **k: (ops, 0))
+    achats, _, notes, _ = passer(tmp_path, SUIVIS_FONDS, vus_vide())
+    assert [o.ticker for o in achats] == ["IBM"] and not any("illisible" in n for n in notes)
+
+
+def test_fonds_commun_non_cote_ecarte_sans_note_ni_blocage(tmp_path, marche, monkeypatch):
+    # CRAFX : symbole Nasdaq de fonds commun (5 lettres finissant par X), sans cours ni nombre d'actions chez Yahoo
+    ops = [operation("fonds", "fonds:1135730", "CRAFX", source="13f:ACC1:AAA"),
+           operation("fonds", "fonds:1135730", "IBM", source="13f:ACC1:BBB")]
+    monkeypatch.setattr(fonds, "telecharger", lambda *a, **k: (ops, 0))
+    achats, _, notes, vus = passer(tmp_path, SUIVIS_FONDS, vus_vide())
+    assert [o.ticker for o in achats] == ["IBM"] and not any("CRAFX" in n for n in notes)
+    assert not any("CRAFX" in tickers for _, tickers in marche.appels)  # Yahoo n'est pas interrogé
+    assert vus["indisponibles"] == {} and "13f:ACC1" in vus["vus"]  # dépôt marqué vu : rien à relire
 
 
 # --- vus.json ---

@@ -18,6 +18,7 @@ une donnée : on n'en extrait que des champs précis, jamais d'instruction.
 import json
 import os
 import time
+from collections import Counter
 from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
@@ -32,7 +33,7 @@ from inities.chambre import ErreurChambre
 from inities.copie_alpaca import DOSSIER, charger_etat
 from inities.dirigeants import ErreurDirigeants, achat_retenu, groupes
 from inities.fonds import ErreurFonds
-from inities.modele import Operation, nettoyer_ticker
+from inities.modele import Operation, nettoyer_ticker, non_cote
 from inities.sec import ErreurSec
 from inities.senat import AccordNonAccepte, ErreurSenat
 
@@ -375,11 +376,14 @@ def _univers(tickers, aujourd_hui, dossier, p):
 # --- collecte ---
 
 def _nettoyer(lots):
-    """Opérations avec un ticker lisible ; (lots nettoyés, nombre d'opérations ignorées)."""
+    """Opérations avec un ticker lisible ; (lots nettoyés, nombre d'opérations ignorées). Un titre non coté est écarté
+    sans être compté."""
     ignorees, propres = 0, {}
     for jeton, operations in lots.items():
         propres[jeton] = []
         for op in operations:
+            if non_cote(op.ticker):
+                continue
             ticker = nettoyer_ticker(op.ticker)
             if ticker is None:
                 ignorees += 1
@@ -487,7 +491,7 @@ def collecter(suivis, vus, aujourd_hui, config, client_sec, *, etat=None, sessio
         notes.append(f"Univers : données manquantes depuis {jours_absent} jours, achat écarté ({ticker})")
     lecture.echec = lecture.echec or bool(a_relire)
 
-    achats, ventes, hors_univers = [], [], 0
+    achats, ventes, hors_univers = [], [], Counter()
     for jeton, ops in lots.items():
         if jeton in bloques:
             continue
@@ -496,7 +500,7 @@ def collecter(suivis, vus, aujourd_hui, config, client_sec, *, etat=None, sessio
                 if op.ticker in dans_univers:
                     achats.append(op)
                 elif op.ticker in hors:
-                    hors_univers += 1
+                    hors_univers[op.ticker] += 1
             elif op.sens == "vente" and (op.personne_id, op.ticker) in positions:
                 ventes.append(op)
     # la vente d'un titre pas encore détenu n'est pas renvoyée : l'achat déjà revendu est marqué ici
@@ -507,8 +511,8 @@ def collecter(suivis, vus, aujourd_hui, config, client_sec, *, etat=None, sessio
     achats = [replace(op, details={**op.details, "deja_revendu": True})
               if reventes.get((op.personne_id, op.ticker), date.min) >= op.date_operation else op for op in achats]
     if hors_univers:
-        notes.append(f"{hors_univers} achat(s) hors univers (capitalisation sous le seuil : "
-                     f"{', '.join(sorted(hors))})")
+        detail = ", ".join(t if n == 1 else f"{t} ×{n}" for t, n in sorted(hors_univers.items()))
+        notes.append(f"{hors_univers.total()} achat(s) hors univers (capitalisation sous le seuil : {detail})")
 
     limite_groupe = aujourd_hui - timedelta(days=p["groupe_dirigeants_jours"])
     historique = [a for a in vus["achats_dirigeants"] if date.fromisoformat(a["date"]) >= limite_groupe]

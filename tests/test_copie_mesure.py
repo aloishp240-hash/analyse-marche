@@ -11,7 +11,7 @@ from inities.cours import actions_en_circulation, charger
 from inities.dirigeants import achat_retenu
 from inities.mesure import (SEANCES_3M, SEANCES_6M, bat_qqq, bilan, bilan_dirigeants, dans_univers, rendement_copie,
                             selectionner)
-from inities.modele import Operation, nettoyer_ticker
+from inities.modele import Operation, nettoyer_ticker, non_cote
 
 P = {"fenetre_mois": 18, "recent_mois": 6, "politicien_achats_min": 10, "politicien_delai_max_j": 30,
      "politicien_montant_min": 15000, "dirigeant_montant_min": 100000, "groupe_dirigeants_jours": 30,
@@ -533,6 +533,14 @@ def test_bat_qqq_compare_les_memes_copies_que_la_part_battue():
     ("LEN, LEN.B", None), ("HEI, HEI.A", None), ("BBXIA/B", None), ("", None), ("TOOLONGX", None), (None, None)])
 def test_nettoyer_ticker(brut, propre):
     assert nettoyer_ticker(brut) == propre
+
+
+@pytest.mark.parametrize("brut, attendu", [
+    ("[NONE]", True), ("[ NONE ]", True), ("None", True), ("N/A", True), ("NA", True), ("N.A.", True), ("-", True),
+    ("", True), (None, True), ("CRAFX", True), ("vfiax", True), ("AAPL", False), ("NXG", False), ("GOOGL", False),
+    ("XXXX", False), ("LEN, LEN.B", False)])
+def test_non_cote(brut, attendu):
+    assert non_cote(brut) is attendu
 
 
 def test_charger_demande_le_point_de_classe_avec_un_tiret_mais_garde_le_ticker_d_origine(tmp_path, monkeypatch):
