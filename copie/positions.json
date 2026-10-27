@@ -1,4 +1,18 @@
 {
- "positions": [],
+ "positions": [
+  {
+   "ticker": "BBT",
+   "personne_id": "dirigeant:1368208",
+   "source_id": "form4:0001628280-26-067255:1",
+   "id_ordre": "61cb335c-ac3d-4ecb-b73b-bc1e57677ee2",
+   "id_stop": "4916f601-30e2-4817-88b9-b1988863e933",
+   "date_entree": "2026-10-27",
+   "date_operation": "2026-10-26",
+   "stop": 26.231000518798826,
+   "quantite": 9,
+   "sortie_prevue": "2027-04-27",
+   "stop_recale": false
+  }
+ ],
  "historique": []
 }
