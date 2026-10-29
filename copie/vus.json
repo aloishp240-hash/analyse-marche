@@ -1,5 +1,5 @@
 {
- "dernier_passage": "2026-10-27",
+ "dernier_passage": "2026-10-28",
  "vus": {},
  "achats_dirigeants": [
   {
@@ -31,6 +31,46 @@
    "ticker": "MSM",
    "date": "2026-10-23",
    "personne_id": "dirigeant:1008015"
+  },
+  {
+   "ticker": "ACN",
+   "date": "2026-10-26",
+   "personne_id": "dirigeant:1369240"
+  },
+  {
+   "ticker": "ACN",
+   "date": "2026-10-26",
+   "personne_id": "dirigeant:1487630"
+  },
+  {
+   "ticker": "TTMI",
+   "date": "2026-10-28",
+   "personne_id": "dirigeant:1561100"
+  },
+  {
+   "ticker": "LBRT",
+   "date": "2026-10-26",
+   "personne_id": "dirigeant:1705702"
+  },
+  {
+   "ticker": "FLG",
+   "date": "2026-10-27",
+   "personne_id": "dirigeant:1649471"
+  },
+  {
+   "ticker": "HXL",
+   "date": "2026-10-26",
+   "personne_id": "dirigeant:1319629"
+  },
+  {
+   "ticker": "HBAN",
+   "date": "2026-10-26",
+   "personne_id": "dirigeant:1213483"
+  },
+  {
+   "ticker": "TTMI",
+   "date": "2026-10-28",
+   "personne_id": "dirigeant:1705520"
   }
  ],
  "indisponibles": {
