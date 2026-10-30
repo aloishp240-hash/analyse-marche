@@ -57,78 +57,78 @@
    "personne_id": "dirigeant:1487630",
    "source_id": "form4:0001487630-26-000022:2",
    "id_ordre": "db804d1d-ec65-4fa8-aa17-bf70b9d446c8",
-   "id_stop": "f9f6a166-6b80-4dde-b776-43a199f46899",
+   "id_stop": "d7d10e50-cda0-4e16-ae5e-3542895a4de7",
    "date_entree": "2026-10-29",
    "date_operation": "2026-10-26",
-   "stop": 206.8899948120117,
+   "stop": 207.196,
    "quantite": 1,
    "sortie_prevue": "2027-04-29",
-   "stop_recale": false
+   "stop_recale": true
   },
   {
    "ticker": "TTMI",
    "personne_id": "dirigeant:1561100",
    "source_id": "form4:0001193125-26-436557:2",
    "id_ordre": "fe4e86cf-1b9e-4a7f-a902-12fc5930de82",
-   "id_stop": "a17794a4-c347-4010-ae01-0f00de78419e",
+   "id_stop": "127a9993-a4b1-4cfd-b62f-7443c8d53519",
    "date_entree": "2026-10-29",
    "date_operation": "2026-10-28",
-   "stop": 77.17150077819824,
+   "stop": 76.66433305,
    "quantite": 3,
    "sortie_prevue": "2027-04-29",
-   "stop_recale": false
+   "stop_recale": true
   },
   {
    "ticker": "HXL",
    "personne_id": "dirigeant:1319629",
    "source_id": "form4:0001193125-26-436418:1",
    "id_ordre": "8d5e00db-132b-4136-9151-b75b9b59f08b",
-   "id_stop": "641debad-be89-46bc-8e62-00ded9688907",
+   "id_stop": "6b8536b5-64d4-442f-a2b7-e5335bc2e609",
    "date_entree": "2026-10-29",
    "date_operation": "2026-10-26",
-   "stop": 66.30850181579589,
+   "stop": 68.255,
    "quantite": 3,
    "sortie_prevue": "2027-04-29",
-   "stop_recale": false
+   "stop_recale": true
   },
   {
    "ticker": "LBRT",
    "personne_id": "dirigeant:1705702",
    "source_id": "form4:0001628280-26-067906:1",
    "id_ordre": "68863aad-1302-46ef-a77c-c590832b1298",
-   "id_stop": "699d9813-6528-4131-86a6-15e0856142a1",
+   "id_stop": "3953f47e-feea-4b4e-83b0-48341433df67",
    "date_entree": "2026-10-29",
    "date_operation": "2026-10-26",
-   "stop": 14.968500518798828,
+   "stop": 15.075812499999998,
    "quantite": 16,
    "sortie_prevue": "2027-04-29",
-   "stop_recale": false
+   "stop_recale": true
   },
   {
    "ticker": "HBAN",
    "personne_id": "dirigeant:1213483",
    "source_id": "form4:0001225208-26-008542:2",
    "id_ordre": "27df43ea-6735-44fd-9086-7af97efdca74",
-   "id_stop": "59d14d5f-f3c7-4fde-a2a4-f0a40e457d7b",
+   "id_stop": "281347b9-f305-4d12-ad7e-f2872b9157d0",
    "date_entree": "2026-10-29",
    "date_operation": "2026-10-26",
-   "stop": 13.344999837875365,
+   "stop": 13.63265785,
    "quantite": 19,
    "sortie_prevue": "2027-04-29",
-   "stop_recale": false
+   "stop_recale": true
   },
   {
    "ticker": "FLG",
    "personne_id": "dirigeant:1649471",
    "source_id": "form4:0001649471-26-000006:1",
    "id_ordre": "d9f4266a-0d99-47bf-a18c-680d6a8125d2",
-   "id_stop": "7bda5454-1dd9-4401-a846-3c9ef7805ab0",
+   "id_stop": "2fbe2b5d-88b0-4e57-a465-48004890721b",
    "date_entree": "2026-10-29",
    "date_operation": "2026-10-27",
-   "stop": 8.635999870300292,
+   "stop": 8.7805,
    "quantite": 29,
    "sortie_prevue": "2027-04-29",
-   "stop_recale": false
+   "stop_recale": true
   }
  ],
  "historique": []
