@@ -1,5 +1,5 @@
 {
- "dernier_passage": "2026-10-30",
+ "dernier_passage": "2026-11-02",
  "vus": {},
  "achats_dirigeants": [
   {
@@ -96,6 +96,21 @@
    "ticker": "TFC",
    "date": "2026-10-28",
    "personne_id": "dirigeant:1534574"
+  },
+  {
+   "ticker": "ENPH",
+   "date": "2026-11-02",
+   "personne_id": "dirigeant:1543777"
+  },
+  {
+   "ticker": "FCPT",
+   "date": "2026-11-02",
+   "personne_id": "dirigeant:1548409"
+  },
+  {
+   "ticker": "LSTR",
+   "date": "2026-10-30",
+   "personne_id": "dirigeant:1653042"
   }
  ],
  "indisponibles": {
