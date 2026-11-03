@@ -1,52 +1,104 @@
 {
   "capital_initial": 3000,
-  "debut": null,
-  "liquidites_eur": 3000,
-  "lignes": [],
-  "decision": {
-    "date": "2026-10-30",
-    "mois": "2026-10",
-    "porteur": true,
-    "classement": [
-      {
-        "ticker": "SNDK",
-        "nom": "Sandisk",
-        "perf": 774.8
-      },
-      {
-        "ticker": "MRNA",
-        "nom": "Moderna",
-        "perf": 664.9
-      },
-      {
-        "ticker": "LITE",
-        "nom": "Lumentum",
-        "perf": 388.0
-      },
-      {
-        "ticker": "MU",
-        "nom": "Micron Technology",
-        "perf": 384.7
-      },
-      {
-        "ticker": "STX",
-        "nom": "Seagate Technology",
-        "perf": 258.1
-      }
-    ],
-    "ventes": [],
-    "achats": [
-      "SNDK",
-      "MRNA",
-      "LITE",
-      "MU",
-      "STX"
-    ],
-    "conserves": []
-  },
+  "debut": "2026-11-03",
+  "liquidites_eur": 0.0,
+  "lignes": [
+    {
+      "ticker": "SNDK",
+      "nom": "Sandisk",
+      "quantite": 0.6054,
+      "prix_entree": 1106.46,
+      "date_entree": "2026-11-03",
+      "cout_eur": 600.0
+    },
+    {
+      "ticker": "MRNA",
+      "nom": "Moderna",
+      "quantite": 3.0173,
+      "prix_entree": 222.01,
+      "date_entree": "2026-11-03",
+      "cout_eur": 600.0
+    },
+    {
+      "ticker": "LITE",
+      "nom": "Lumentum",
+      "quantite": 0.9836,
+      "prix_entree": 681.01,
+      "date_entree": "2026-11-03",
+      "cout_eur": 600.0
+    },
+    {
+      "ticker": "MU",
+      "nom": "Micron Technology",
+      "quantite": 0.779,
+      "prix_entree": 859.81,
+      "date_entree": "2026-11-03",
+      "cout_eur": 600.0
+    },
+    {
+      "ticker": "STX",
+      "nom": "Seagate Technology",
+      "quantite": 1.0938,
+      "prix_entree": 612.38,
+      "date_entree": "2026-11-03",
+      "cout_eur": 600.0
+    }
+  ],
+  "decision": null,
   "derniere_decision": "2026-10",
   "dernier_releve": "2026-11-02",
-  "qqq_depart": null,
-  "operations": [],
+  "qqq_depart": 684.260009765625,
+  "operations": [
+    {
+      "date": "2026-11-03",
+      "type": "achat",
+      "ticker": "SNDK",
+      "nom": "Sandisk",
+      "quantite": 0.6054,
+      "prix": 1106.46,
+      "montant_eur": 600.0,
+      "frais_eur": 1.6
+    },
+    {
+      "date": "2026-11-03",
+      "type": "achat",
+      "ticker": "MRNA",
+      "nom": "Moderna",
+      "quantite": 3.0173,
+      "prix": 222.01,
+      "montant_eur": 600.0,
+      "frais_eur": 1.6
+    },
+    {
+      "date": "2026-11-03",
+      "type": "achat",
+      "ticker": "LITE",
+      "nom": "Lumentum",
+      "quantite": 0.9836,
+      "prix": 681.01,
+      "montant_eur": 600.0,
+      "frais_eur": 1.6
+    },
+    {
+      "date": "2026-11-03",
+      "type": "achat",
+      "ticker": "MU",
+      "nom": "Micron Technology",
+      "quantite": 0.779,
+      "prix": 859.81,
+      "montant_eur": 600.0,
+      "frais_eur": 1.6
+    },
+    {
+      "date": "2026-11-03",
+      "type": "achat",
+      "ticker": "STX",
+      "nom": "Seagate Technology",
+      "quantite": 1.0938,
+      "prix": 612.38,
+      "montant_eur": 600.0,
+      "frais_eur": 1.6
+    }
+  ],
   "historique": []
 }
