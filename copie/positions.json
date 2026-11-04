@@ -109,26 +109,26 @@
    "personne_id": "dirigeant:1653042",
    "source_id": "form4:0000853816-26-000069:1",
    "id_ordre": "2b36833c-2851-4b33-a443-98fe0811a62b",
-   "id_stop": "af7f720f-3763-444c-a056-ea90c26fbca9",
+   "id_stop": "1b5acc65-3583-4615-b511-4d77fdb586ee",
    "date_entree": "2026-11-03",
    "date_operation": "2026-10-30",
-   "stop": 125.40049896240234,
+   "stop": 128.537,
    "quantite": 1,
    "sortie_prevue": "2027-05-03",
-   "stop_recale": false
+   "stop_recale": true
   },
   {
    "ticker": "ENPH",
    "personne_id": "dirigeant:1543777",
    "source_id": "form4:0001543777-26-000006:1",
    "id_ordre": "b83c082f-6f92-425a-8a0f-360a2478dd72",
-   "id_stop": "88354ed1-7eb4-4eff-b46c-8ea4e6aeb7f5",
+   "id_stop": "17413b46-821f-453f-b421-48b2c88c620f",
    "date_entree": "2026-11-03",
    "date_operation": "2026-11-02",
-   "stop": 23.740500259399415,
+   "stop": 24.2505,
    "quantite": 10,
    "sortie_prevue": "2027-05-03",
-   "stop_recale": false
+   "stop_recale": true
   }
  ],
  "historique": [

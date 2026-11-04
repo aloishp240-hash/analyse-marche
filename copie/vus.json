@@ -1,5 +1,5 @@
 {
- "dernier_passage": "2026-11-02",
+ "dernier_passage": "2026-11-03",
  "vus": {},
  "achats_dirigeants": [
   {
@@ -111,6 +111,61 @@
    "ticker": "LSTR",
    "date": "2026-10-30",
    "personne_id": "dirigeant:1653042"
+  },
+  {
+   "ticker": "SITE",
+   "date": "2026-10-30",
+   "personne_id": "dirigeant:1672083"
+  },
+  {
+   "ticker": "BA",
+   "date": "2026-10-30",
+   "personne_id": "dirigeant:1434806"
+  },
+  {
+   "ticker": "BA",
+   "date": "2026-10-30",
+   "personne_id": "dirigeant:2041310"
+  },
+  {
+   "ticker": "CAT",
+   "date": "2026-11-02",
+   "personne_id": "dirigeant:1523568"
+  },
+  {
+   "ticker": "LKQ",
+   "date": "2026-10-30",
+   "personne_id": "dirigeant:1182292"
+  },
+  {
+   "ticker": "LRN",
+   "date": "2026-10-30",
+   "personne_id": "dirigeant:1684185"
+  },
+  {
+   "ticker": "LRN",
+   "date": "2026-11-02",
+   "personne_id": "dirigeant:1684185"
+  },
+  {
+   "ticker": "LRN",
+   "date": "2026-11-03",
+   "personne_id": "dirigeant:1684185"
+  },
+  {
+   "ticker": "LKQ",
+   "date": "2026-11-02",
+   "personne_id": "dirigeant:2057533"
+  },
+  {
+   "ticker": "MGM",
+   "date": "2026-10-30",
+   "personne_id": "dirigeant:1307631"
+  },
+  {
+   "ticker": "MGM",
+   "date": "2026-11-02",
+   "personne_id": "dirigeant:1307631"
   }
  ],
  "indisponibles": {
