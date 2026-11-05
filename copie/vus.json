@@ -1,5 +1,5 @@
 {
- "dernier_passage": "2026-11-03",
+ "dernier_passage": "2026-11-04",
  "vus": {},
  "achats_dirigeants": [
   {
@@ -166,6 +166,56 @@
    "ticker": "MGM",
    "date": "2026-11-02",
    "personne_id": "dirigeant:1307631"
+  },
+  {
+   "ticker": "AN",
+   "date": "2026-11-03",
+   "personne_id": "dirigeant:1293167"
+  },
+  {
+   "ticker": "AN",
+   "date": "2026-11-02",
+   "personne_id": "dirigeant:1518992"
+  },
+  {
+   "ticker": "CACC",
+   "date": "2026-11-02",
+   "personne_id": "dirigeant:897542"
+  },
+  {
+   "ticker": "HGV",
+   "date": "2026-11-02",
+   "personne_id": "dirigeant:1593210"
+  },
+  {
+   "ticker": "HGV",
+   "date": "2026-11-03",
+   "personne_id": "dirigeant:1476217"
+  },
+  {
+   "ticker": "INTC",
+   "date": "2026-11-02",
+   "personne_id": "dirigeant:1008463"
+  },
+  {
+   "ticker": "LSCC",
+   "date": "2026-11-04",
+   "personne_id": "dirigeant:1541375"
+  },
+  {
+   "ticker": "PAM",
+   "date": "2026-11-04",
+   "personne_id": "dirigeant:2123147"
+  },
+  {
+   "ticker": "LRN",
+   "date": "2026-11-02",
+   "personne_id": "dirigeant:1567675"
+  },
+  {
+   "ticker": "LRN",
+   "date": "2026-11-03",
+   "personne_id": "dirigeant:1567675"
   }
  ],
  "indisponibles": {
