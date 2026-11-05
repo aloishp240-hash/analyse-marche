@@ -1,0 +1,55 @@
+{
+  "jour": "2026-11-04",
+  "session_reussie": true,
+  "candidats": [
+    {
+      "ticker": "SHOP",
+      "nom": "Shopify",
+      "configuration": "A",
+      "cloture": 153.03,
+      "entree": 150.89,
+      "stop": 138.06,
+      "objectif": 176.55,
+      "atr": 8.55,
+      "mm50": 152.75,
+      "date_resultats": "2026-11-03",
+      "avis_claude": null,
+      "motif_claude": null,
+      "ordre_cree": false,
+      "id_ordre": null,
+      "refus_code": []
+    }
+  ],
+  "incoherences": [
+    "SHOP : aucun avis de Claude dans le compte rendu"
+  ],
+  "refus_hors_candidats": [],
+  "fermetures": 0,
+  "cout": {
+    "tours": 7,
+    "duree_s": 17,
+    "cout_usd": 0.07204289999999999,
+    "WebSearch": 0,
+    "WebFetch": 0,
+    "Bash": 4,
+    "Skill": 1
+  },
+  "sources": [
+    {
+      "outil": "Bash",
+      "source": "python outils/notes.py lire; python outils/candidats.py"
+    },
+    {
+      "outil": "Bash",
+      "source": "python outils/actualites.py SHOP"
+    },
+    {
+      "outil": "Bash",
+      "source": "python fiche.py SHOP"
+    },
+    {
+      "outil": "Bash",
+      "source": "python outils/notes.py ajouter \"2026-11-05 : Shopify (SHOP) rejeté — repli de ~15 % causé par résultats avec GMV sous les attentes (nouvelle de fond), rebond +7 % du lendemain, MACD baissier, PER 94. À revoir si le cours se stabilise sans nouvelle négative.\""
+    }
+  ]
+}
