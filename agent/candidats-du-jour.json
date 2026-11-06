@@ -1,24 +1,8 @@
 {
-  "jour": "2026-11-04",
-  "donnees_au": "2026-11-04",
+  "jour": "2026-11-05",
+  "donnees_au": "2026-11-05",
   "entrees_bloquees": [],
   "candidats_non_proposes": [],
   "titres_ecartes": {},
-  "candidats": [
-    {
-      "ticker": "SHOP",
-      "configuration": "A",
-      "cloture": 153.03,
-      "atr": 8.55,
-      "rsi": 44.1,
-      "mm50": 152.75,
-      "force_relative": 6.97,
-      "entree": 150.89,
-      "stop": 138.06,
-      "objectif": 176.55,
-      "industrie": "Software - Application",
-      "nom": "Shopify",
-      "date_resultats": "2026-11-03"
-    }
-  ]
+  "candidats": []
 }
