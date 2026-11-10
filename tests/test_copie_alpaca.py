@@ -820,3 +820,61 @@ def test_copier_passe_les_ventes_aux_entrees():
     messages, signales = copier([achat()], [vente(operation=date(2026, 10, 18))], {"AAA": 100.0}, client, P,
                                 AUJOURD_HUI)
     assert [motif for _, motif in signales] == ["déjà revendu"] and client.appels_de("passer_oto") == []
+
+
+# --- Stop au break-even (BE) : remonté une fois à prix payé × (1 + be_marge_pct) dès +be_seuil_pct de plus-value
+
+P_BE = {**P, "be_seuil_pct": 10, "be_marge_pct": 0.5}
+
+
+def client_recale(cours, prix=100, **champs):
+    """Position exécutée à `prix`, stop déjà recalé, cours actuel `cours` chez Alpaca."""
+    client, etat = client_avec_position(prix=prix, stop_recale=True, **champs)
+    client.positions_alpaca[0]["current_price"] = str(cours)
+    return client, etat
+
+
+def test_be_seuil_atteint_remonte_le_stop_une_fois():
+    client, etat = client_recale(110)
+    etat, messages = rapprocher(etat, client, P_BE)
+    assert client.appels_de("modifier_stop") == [("modifier_stop", "stop-1", pytest.approx(100.5))]
+    pos = etat["positions"][0]
+    assert pos["be_fait"] is True and pos["stop"] == pytest.approx(100.5) and pos["id_stop"] == "stop-1-r1"
+    assert len(messages) == 1 and "AAA" in messages[0] and "BE" in messages[0]
+    etat, messages = rapprocher(etat, client, P_BE)
+    assert len(client.appels_de("modifier_stop")) == 1 and messages == []
+    assert not copie_alpaca.SUSPENSION.exists()
+
+
+def test_be_seuil_non_atteint_ne_touche_a_rien():
+    client, etat = client_recale(109.9)
+    etat, messages = rapprocher(etat, client, P_BE)
+    assert client.appels_de("modifier_stop") == [] and messages == [] and not etat["positions"][0].get("be_fait")
+
+
+def test_be_stop_deja_plus_haut_jamais_baisse():
+    client, etat = client_recale(115, stop=101.0)
+    etat, messages = rapprocher(etat, client, P_BE)
+    assert client.appels_de("modifier_stop") == [] and messages == [] and etat["positions"][0]["stop"] == 101.0
+
+
+def test_be_deja_fait_pas_refait():
+    client, etat = client_recale(120, be_fait=True)
+    etat, messages = rapprocher(etat, client, P_BE)
+    assert client.appels_de("modifier_stop") == [] and messages == []
+
+
+def test_be_desactive_sans_reglage_ou_sans_cours():
+    client, etat = client_recale(120)
+    rapprocher(etat, client, P)  # pas de be_seuil_pct
+    del client.positions_alpaca[0]["current_price"]
+    rapprocher(etat, client, P_BE)  # cours absent
+    assert client.appels_de("modifier_stop") == []
+
+
+def test_be_refuse_signale_sans_suspendre():
+    client, etat = client_recale(110)
+    client.refuse_modification = "Alpaca a répondu 422 : refus"
+    etat, messages = rapprocher(etat, client, P_BE)
+    assert not etat["positions"][0].get("be_fait") and etat["positions"][0]["stop"] == 85.0
+    assert len(messages) == 1 and "AAA" in messages[0] and not copie_alpaca.SUSPENSION.exists()

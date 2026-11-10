@@ -124,16 +124,48 @@ def _virgule(nombre):
     return f"{nombre:.2f}".replace(".", ",")
 
 
+def _niveau_be(prix_paye, cours, p):
+    """Niveau du stop au break-even (prix payé × (1 + be_marge_pct %)) si le cours a monté d'au moins be_seuil_pct %
+    depuis l'achat, sinon None. Désactivé sans be_seuil_pct, ou si la marge n'est pas sous le seuil (le stop serait
+    au-dessus du cours)."""
+    seuil, marge = (p or {}).get("be_seuil_pct"), (p or {}).get("be_marge_pct", 0)
+    if seuil is None or prix_paye is None or cours is None or not 0 <= marge < seuil:
+        return None
+    atteint = cours >= prix_paye * (1 + seuil / 100) - 1e-9  # tolérance d'arrondi : +10 % pile compte
+    return prix_paye * (1 + marge / 100) if atteint else None
+
+
+def _break_even(position, prix_paye, cours, client, p, messages):
+    """Remonte le stop au break-even, une seule fois (`be_fait`), sans jamais le baisser. Un refus d'Alpaca est
+    signalé sans suspendre : l'ancien stop reste en place et la position reste protégée."""
+    niveau = _niveau_be(prix_paye, cours, p)
+    if position.get("be_fait") or niveau is None or niveau <= position.get("stop", 0):
+        return
+    ticker = position["ticker"]
+    try:
+        reponse = client.modifier_stop(position["id_stop"], niveau)
+    except ErreurAlpaca as erreur:
+        messages.append(f"{ticker} : stop non remonté au BE ({str(erreur)[:200]}), l'ancien stop reste en place.")
+        return
+    position["id_stop"] = (reponse or {}).get("id") or position["id_stop"]
+    position["stop"], position["be_fait"] = niveau, True
+    gain = (cours / prix_paye - 1) * 100
+    messages.append(f"🛡️ {ticker} : +{_virgule(gain)} % depuis l'achat, stop remonté au BE à {_virgule(niveau)} $ "
+                    f"(achat {_virgule(prix_paye)} $).")
+
+
 def rapprocher(etat, client, p=None, aujourd_hui=None, messages=None):
     """Compare l'état au compte : stop exécuté (sortie), recalage unique du stop à (100 - stop_pct) % du prix payé,
-    vente confirmée, écart (suspension). Le stop est lu directement par son identifiant (`id_stop`, tenu à jour
+    puis passage unique au break-even (`_break_even`), vente confirmée, écart (suspension). Le stop est lu directement par son identifiant (`id_stop`, tenu à jour
     après chaque recalage ou stop reposé) ; les jambes de l'ordre d'achat ne servent qu'à le trouver la première
     fois. Renvoie (état, messages)."""
     jour = aujourd_hui or date.today()
     coefficient = 1 - ((p or {}).get("stop_pct", STOP_PCT_DEFAUT)) / 100
     messages = [] if messages is None else messages
     ecarts = []
-    chez_alpaca = {pos["symbol"] for pos in client.positions()}
+    positions_alpaca = client.positions()
+    chez_alpaca = {pos["symbol"] for pos in positions_alpaca}
+    cours = {pos["symbol"]: _prix(pos.get("current_price")) for pos in positions_alpaca}
 
     en_vente = set()  # ventes demandées et pas encore exécutées : la position peut encore apparaître chez Alpaca
     for ligne in etat["historique"]:
@@ -184,6 +216,9 @@ def rapprocher(etat, client, p=None, aujourd_hui=None, messages=None):
                         position["id_stop"] = (reponse or {}).get("id") or position["id_stop"]
                         position["stop"], position["stop_recale"] = stop, True
                         messages.append(f"Achat de {ticker} exécuté : stop recalé à {_virgule(stop)} $.")
+                else:
+                    _break_even(position, _prix(ordre.get("filled_avg_price")), cours.get(ticker), client, p,
+                                messages)
 
     connus = {pos["ticker"] for pos in etat["positions"]} | en_vente
     for ticker in sorted(chez_alpaca - connus):

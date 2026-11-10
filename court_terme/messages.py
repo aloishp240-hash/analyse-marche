@@ -53,6 +53,7 @@ def message_evenement(evt):
         "temps": f"⏱️ STOP TEMPOREL — {t} vendue à {prix} (15e séance){resultat}",
         "decision": f"✋ VENTE PAR CLAUDE — {t} vendue à {prix} à l'ouverture{resultat}",
         "stop_remonte": f"🛡️ STOP REMONTÉ — {t} : stop au prix d'entrée {prix}",
+        "stop_be": f"🛡️ STOP AU BE — {t} : stop remonté à {prix} (prix d'entrée + marge)",
         "annule": f"🚫 ORDRE ANNULÉ — {t} (limite {prix}) : {evt.get('motif', '')}",
         "split": f"✂️ DIVISION DE L'ACTION — {t} : 1 action devient {evt.get('ratio', 0):g}, "
                  f"prix, stop et objectif ajustés",

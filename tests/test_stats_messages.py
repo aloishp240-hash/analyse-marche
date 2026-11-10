@@ -41,7 +41,7 @@ def test_message_signal():
 
 
 def test_message_evenement():
-    for type_ in ("entree", "expire", "stop", "objectif", "temps", "stop_remonte"):
+    for type_ in ("entree", "expire", "stop", "objectif", "temps", "stop_remonte", "stop_be"):
         texte = message_evenement({"type": type_, "ticker": "AAA", "jour": "2026-10-20", "prix": 99.5,
                                    "resultat_eur": -18.0})
         assert "AAA" in texte and "99.50" in texte

@@ -91,8 +91,9 @@ def _sortie(pos, b, p):
             return "objectif", b["ouverture"], False
     prudent = _jour_entree_prudent(pos, b, p)
     if b["bas"] <= pos["stop"]:
-        # Un stop remonté au prix d'entrée ne peut pas vendre au-dessus de l'achat
-        prix = min(pos["stop"], pos["prix_entree"])
+        # Un stop remonté au prix d'entrée ne peut pas vendre au-dessus de l'achat ; seul le stop au break-even
+        # (be_fait) vend au-dessus, à son niveau
+        prix = pos["stop"] if pos.get("be_fait") else min(pos["stop"], pos["prix_entree"])
         _extremes(pos, pos["prix_entree"], prix)
         return "stop", prix, True
     if b["haut"] >= pos["objectif"] and not prudent:
@@ -114,11 +115,24 @@ def _traiter_position(etat, pos, b, taux_eurusd, p):
         return [_fermer(etat, pos, b["jour"], prix, motif, taux_eurusd, p, au_marche)], True
     evts = []
     # Sur une barre partielle, le plus bas peut précéder la hausse : le stop ne remonte qu'en fin de séance
-    if b["terminee"] and not _jour_entree_prudent(pos, b, p) \
-            and b["haut"] >= pos["prix_entree"] + p["remontee_stop_atr"] * pos["atr"] and pos["stop"] < pos["prix_entree"]:
-        pos["stop"] = pos["prix_entree"]
-        noter(pos, "stop_remonte", b["jour"].isoformat(), stop=pos["stop"])
-        evts.append(_evenement("stop_remonte", pos, b["jour"], pos["stop"]))
+    if b["terminee"] and not _jour_entree_prudent(pos, b, p):
+        # Deux remontées possibles, on garde le stop le plus haut, jamais plus bas que l'actuel :
+        # prix d'achat dès +remontee_stop_atr ATR ; break-even (achat + be_marge_pct %) dès +be_seuil_pct %, une fois
+        niveaux = []
+        if b["haut"] >= pos["prix_entree"] + p["remontee_stop_atr"] * pos["atr"]:
+            niveaux.append((pos["prix_entree"], "stop_remonte"))
+        seuil, marge = p.get("be_seuil_pct"), p.get("be_marge_pct", 0)
+        if seuil is not None and 0 <= marge < seuil and not pos.get("be_fait") \
+                and b["haut"] >= pos["prix_entree"] * (1 + seuil / 100) - 1e-9:
+            niveaux.append((pos["prix_entree"] * (1 + marge / 100), "stop_be"))
+        if niveaux:
+            niveau, type_ = max(niveaux)
+            if niveau > pos["stop"]:
+                pos["stop"] = niveau
+                if type_ == "stop_be":
+                    pos["be_fait"] = True
+                noter(pos, type_, b["jour"].isoformat(), stop=pos["stop"])
+                evts.append(_evenement(type_, pos, b["jour"], pos["stop"]))
     if b["terminee"]:
         pos["seances"] += 1
         pos["traite_jusqu_au"] = b["jour"].isoformat()

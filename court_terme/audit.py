@@ -26,6 +26,7 @@ def _evenements_du_jour(etat, jour):
                 detail = {"execute": f"achat simulé à {h.get('prix', '?')} $",
                           "cloture": f"vente simulée ({h.get('motif', '?')})",
                           "stop_remonte": f"stop remonté à {h.get('stop', '?')} $",
+                          "stop_be": f"stop au BE à {h.get('stop', '?')} $",
                           "en_attente": "ordre enregistré"}.get(h["evenement"], h["evenement"])
                 lignes.append(f"{titre(e)} : {detail}")
     return lignes

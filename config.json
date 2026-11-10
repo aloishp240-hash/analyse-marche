@@ -55,7 +55,9 @@
     "jour_entree_prudent": true,
     "annulation_gap_atr": 1,
     "annulation_sous_mm50": true,
-    "annulation_resultats": true
+    "annulation_resultats": true,
+    "be_seuil_pct": 10,
+    "be_marge_pct": 0.5
   },
   "momentum": {
     "capital_initial": 3000,
@@ -88,6 +90,8 @@
     "capitalisation_min": 2000000000,
     "volume_dollars_min": 10000000,
     "descriptions_max": 5,
-    "heure_paris": "08:00"
+    "heure_paris": "08:00",
+    "be_seuil_pct": 10,
+    "be_marge_pct": 0.5
   }
 }

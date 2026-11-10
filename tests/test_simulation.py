@@ -147,3 +147,55 @@ def test_vente_decidee_a_l_ouverture_suivante():
     evts = avancer(e, {"AAA": [barre(1, 100, 101, 99, 100.5), barre(2, 101, 102, 100, 101.5)]}, 1.0, p)
     assert [(v["type"], v["prix"]) for v in evts] == [("decision", 101)]
     assert e["positions"] == [] and e["fermees"][0]["motif"] == "decision"
+
+
+# --- Stop au break-even en % (be_seuil_pct) : stop à prix d'entrée × (1 + be_marge_pct), une seule fois
+
+p_be = {**p, "be_seuil_pct": 2, "be_marge_pct": 0.5}
+NIVEAU_BE = 99.5 * 1.005
+
+
+def test_be_seuil_atteint():
+    e = etat(positions=[position()])
+    evts = avancer(e, {"AAA": [barre(1, 100, 101.8, 99.8, 101)]}, 1.0, p_be)  # +2,3 %, sous les 1,5 ATR
+    assert [v["type"] for v in evts] == ["stop_be"] and e["positions"][0]["stop"] == NIVEAU_BE
+    assert e["positions"][0]["be_fait"] is True
+    evts = avancer(e, {"AAA": [barre(2, 101, 101.9, 100.2, 101.5)]}, 1.0, p_be)
+    assert evts == [] and e["positions"][0]["stop"] == NIVEAU_BE
+
+
+def test_be_seuil_non_atteint():
+    e = etat(positions=[position()])
+    evts = avancer(e, {"AAA": [barre(1, 100, 101.4, 99.8, 101)]}, 1.0, p_be)
+    assert evts == [] and e["positions"][0]["stop"] == 96.5
+
+
+def test_be_stop_deja_plus_haut():
+    e = etat(positions=[{**position(), "stop": 100.5}])
+    evts = avancer(e, {"AAA": [barre(1, 100.8, 101.8, 100.6, 101)]}, 1.0, p_be)
+    assert evts == [] and e["positions"][0]["stop"] == 100.5
+
+
+def test_be_deja_fait():
+    e = etat(positions=[{**position(), "be_fait": True}])
+    evts = avancer(e, {"AAA": [barre(1, 100, 101.8, 99.8, 101)]}, 1.0, p_be)
+    assert evts == [] and e["positions"][0]["stop"] == 96.5
+
+
+def test_be_et_remontee_atr_garde_le_plus_haut():
+    e = etat(positions=[position()])
+    evts = avancer(e, {"AAA": [barre(1, 100, 102.6, 99.8, 102)]}, 1.0, p_be)
+    assert [v["type"] for v in evts] == ["stop_be"] and e["positions"][0]["stop"] == NIVEAU_BE
+
+
+def test_be_puis_stop_vend_au_niveau_be():
+    e = etat(positions=[position()])
+    avancer(e, {"AAA": [barre(1, 100, 101.8, 99.8, 101)]}, 1.0, p_be)
+    evts = avancer(e, {"AAA": [barre(2, 100.5, 100.6, 99, 99.2)]}, 1.0, p_be)
+    assert [(v["type"], v["prix"]) for v in evts] == [("stop", NIVEAU_BE)]
+
+
+def test_be_pas_sur_barre_partielle():
+    e = etat(positions=[position()])
+    evts = avancer(e, {"AAA": [barre(1, 100, 101.8, 99.8, 101, terminee=False)]}, 1.0, p_be)
+    assert evts == [] and e["positions"][0]["stop"] == 96.5

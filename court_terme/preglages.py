@@ -43,6 +43,8 @@ REFERENCE = {
     "marge_gap_atr": 0,
     "suspension_baisse_pct": None,
     "fermetures_max_session": None,
+    "be_seuil_pct": None,
+    "be_marge_pct": 0,
 }
 
 NOMS = ("amelioree", "reference")

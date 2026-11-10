@@ -203,6 +203,9 @@ Tout est commité dans `agent/` sur `main` après chaque session :
      pas si le plus haut est venu avant ou après l'achat. Le stop, lui, reste possible ce jour-là.
    - **Stop remonté** : dès que le cours a monté de 1,5 ATR au-dessus de l'achat, le stop passe au prix d'achat ; le
      trade ne peut plus perdre (`remontee_stop_atr`). Il ne redescend jamais.
+   - **Stop au break-even** : dès que le plus haut d'une séance terminée dépasse l'achat de `be_seuil_pct` %, le
+     stop passe une fois au prix d'achat + `be_marge_pct` % (frais et glissement couverts). Avec la remontée en ATR,
+     on garde le stop le plus haut.
    - **Stop temporel** : vente à la clôture de la **15e séance** (environ 3 semaines) si rien d'autre n'est arrivé
      (`stop_temporel_seances`).
    - **Vente décidée par Claude** : à l'ouverture de la séance qui suit sa décision.
