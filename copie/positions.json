@@ -44,13 +44,14 @@
    "personne_id": "dirigeant:1253170",
    "source_id": "form4:0001253170-26-000014:6",
    "id_ordre": "602f32d7-faca-451e-b936-cbbf77dbcc0a",
-   "id_stop": "f99b1f13-e451-4b6d-8718-49b0bb4e36b4",
+   "id_stop": "445e7e70-58b8-44f1-95d0-adbdd016a7e5",
    "date_entree": "2026-10-28",
    "date_operation": "2026-10-26",
-   "stop": 37.382999999999996,
+   "stop": 44.19989999999999,
    "quantite": 7,
    "sortie_prevue": "2027-04-28",
-   "stop_recale": true
+   "stop_recale": true,
+   "be_fait": true
   },
   {
    "ticker": "ACN",
