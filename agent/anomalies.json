@@ -1,0 +1,517 @@
+[
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "QQQ : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "101 titres sur 101 sans cours du jour valides"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "AAPL écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ABNB écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ADBE écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ADI écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ADP écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ADSK écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "AEP écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ALAB écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ALNY écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "AMAT écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "AMD écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "AMGN écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "AMZN écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "APP écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ARM écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ASML écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "AVGO écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "AXON écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "BKNG écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "BKR écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "CCEP écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "CDNS écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "CEG écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "CMCSA écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "COST écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "CPRT écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "CRWD écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "CRWV écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "CSCO écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "CSX écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "CTAS écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "DASH écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "DDOG écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "DXCM écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "EXC écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "FANG écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "FAST écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "FER écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "FTNT écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "GEHC écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "GILD écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "GOOG écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "GOOGL écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "HON écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "HONA écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "IDXX écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "INTC écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "INTU écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ISRG écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "KDP écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "KLAC écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "LIN écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "LITE écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "LRCX écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "MAR écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "MCHP écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "MDLZ écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "MELI écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "META écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "MNST écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "MPWR écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "MRNA écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "MRVL écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "MSFT écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "MSTR écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "MU écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "NBIS écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "NFLX écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "NVDA écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "NXPI écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ODFL écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ORLY écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "PANW écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "PAYX écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "PCAR écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "PDD écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "PEP écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "PLTR écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "PYPL écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "QCOM écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "REGN écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "RKLB écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ROP écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "ROST écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "SBUX écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "SHOP écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "SNDK écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "SNPS écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "SPCX écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "STX écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "TER écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "TMUS écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "TRI écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "TSLA écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "TTWO écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "TXN écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "VRTX écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "WDAY écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "WDC écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "WMT écarté : cours du jour incomplet"
+ },
+ {
+  "quand": "2026-11-11T20:44-05:00",
+  "source": "agent.py",
+  "texte": "XEL écarté : cours du jour incomplet"
+ }
+]
