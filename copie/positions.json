@@ -40,20 +40,6 @@
    "stop_recale": true
   },
   {
-   "ticker": "SRRK",
-   "personne_id": "dirigeant:1253170",
-   "source_id": "form4:0001253170-26-000014:6",
-   "id_ordre": "602f32d7-faca-451e-b936-cbbf77dbcc0a",
-   "id_stop": "445e7e70-58b8-44f1-95d0-adbdd016a7e5",
-   "date_entree": "2026-10-28",
-   "date_operation": "2026-10-26",
-   "stop": 44.19989999999999,
-   "quantite": 7,
-   "sortie_prevue": "2027-04-28",
-   "stop_recale": true,
-   "be_fait": true
-  },
-  {
    "ticker": "ACN",
    "personne_id": "dirigeant:1487630",
    "source_id": "form4:0001487630-26-000022:2",
@@ -130,6 +116,19 @@
    "quantite": 10,
    "sortie_prevue": "2027-05-03",
    "stop_recale": true
+  },
+  {
+   "ticker": "COHR",
+   "personne_id": "dirigeant:1644651",
+   "source_id": "form4:0000899140-26-001276:1",
+   "id_ordre": "ada4de46-fcd7-4b42-be7a-c3ce742880a3",
+   "id_stop": "7732a06d-14a2-4f0b-b2da-21bfa1ba466c",
+   "date_entree": "2026-11-13",
+   "date_operation": "2026-11-09",
+   "stop": 197.26800155639648,
+   "quantite": 1,
+   "sortie_prevue": "2027-05-13",
+   "stop_recale": false
   }
  ],
  "historique": [
@@ -154,6 +153,17 @@
    "prix_entree": 17.73625,
    "prix_sortie": 15.07,
    "quantite": 16
+  },
+  {
+   "ticker": "SRRK",
+   "personne_id": "dirigeant:1253170",
+   "source_id": "form4:0001253170-26-000014:6",
+   "date_entree": "2026-10-28",
+   "date_sortie": "2026-11-13",
+   "raison": "stop",
+   "prix_entree": 43.98,
+   "prix_sortie": 44.04,
+   "quantite": 7
   }
  ]
 }
