@@ -122,13 +122,13 @@
    "personne_id": "dirigeant:1644651",
    "source_id": "form4:0000899140-26-001276:1",
    "id_ordre": "ada4de46-fcd7-4b42-be7a-c3ce742880a3",
-   "id_stop": "7732a06d-14a2-4f0b-b2da-21bfa1ba466c",
+   "id_stop": "5653f6a6-25cd-4e89-b7d1-8f5a70ea8bb1",
    "date_entree": "2026-11-13",
    "date_operation": "2026-11-09",
-   "stop": 197.26800155639648,
+   "stop": 196.3925,
    "quantite": 1,
    "sortie_prevue": "2027-05-13",
-   "stop_recale": false
+   "stop_recale": true
   }
  ],
  "historique": [
