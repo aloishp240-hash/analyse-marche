@@ -1,5 +1,5 @@
 {
- "dernier_passage": "2026-11-13",
+ "dernier_passage": "2026-11-16",
  "vus": {
   "13f:0000919574-26-007862": "2026-11-16"
  },
@@ -588,6 +588,126 @@
    "ticker": "STWD",
    "date": "2026-11-12",
    "personne_id": "dirigeant:1034657"
+  },
+  {
+   "ticker": "AMG",
+   "date": "2026-11-12",
+   "personne_id": "dirigeant:2125273"
+  },
+  {
+   "ticker": "DOX",
+   "date": "2026-11-09",
+   "personne_id": "dirigeant:1968983"
+  },
+  {
+   "ticker": "DOX",
+   "date": "2026-11-12",
+   "personne_id": "dirigeant:1189561"
+  },
+  {
+   "ticker": "DOX",
+   "date": "2026-11-12",
+   "personne_id": "dirigeant:1969089"
+  },
+  {
+   "ticker": "HL",
+   "date": "2026-11-16",
+   "personne_id": "dirigeant:1866675"
+  },
+  {
+   "ticker": "FPS",
+   "date": "2026-11-16",
+   "personne_id": "dirigeant:1865691"
+  },
+  {
+   "ticker": "TEAM",
+   "date": "2026-11-13",
+   "personne_id": "dirigeant:1666120"
+  },
+  {
+   "ticker": "BRK.B",
+   "date": "2026-11-12",
+   "personne_id": "dirigeant:1713777"
+  },
+  {
+   "ticker": "FPS",
+   "date": "2026-11-16",
+   "personne_id": "dirigeant:2108514"
+  },
+  {
+   "ticker": "CNH",
+   "date": "2026-11-12",
+   "personne_id": "dirigeant:1709160"
+  },
+  {
+   "ticker": "CACC",
+   "date": "2026-11-12",
+   "personne_id": "dirigeant:1621706"
+  },
+  {
+   "ticker": "SKYD",
+   "date": "2026-11-11",
+   "personne_id": "dirigeant:1447258"
+  },
+  {
+   "ticker": "SKYD",
+   "date": "2026-11-13",
+   "personne_id": "dirigeant:1447258"
+  },
+  {
+   "ticker": "MP",
+   "date": "2026-11-16",
+   "personne_id": "dirigeant:1831686"
+  },
+  {
+   "ticker": "CTVA",
+   "date": "2026-11-13",
+   "personne_id": "dirigeant:1266395"
+  },
+  {
+   "ticker": "YUMC",
+   "date": "2026-11-13",
+   "personne_id": "dirigeant:1614732"
+  },
+  {
+   "ticker": "FPS",
+   "date": "2026-11-16",
+   "personne_id": "dirigeant:1802646"
+  },
+  {
+   "ticker": "FPS",
+   "date": "2026-11-16",
+   "personne_id": "dirigeant:1868343"
+  },
+  {
+   "ticker": "HUBS",
+   "date": "2026-11-13",
+   "personne_id": "dirigeant:1603527"
+  },
+  {
+   "ticker": "KTOS",
+   "date": "2026-11-13",
+   "personne_id": "dirigeant:1803860"
+  },
+  {
+   "ticker": "SONO",
+   "date": "2026-11-12",
+   "personne_id": "dirigeant:1806159"
+  },
+  {
+   "ticker": "SONO",
+   "date": "2026-11-13",
+   "personne_id": "dirigeant:1806159"
+  },
+  {
+   "ticker": "PAM",
+   "date": "2026-11-12",
+   "personne_id": "dirigeant:2028916"
+  },
+  {
+   "ticker": "PAM",
+   "date": "2026-11-13",
+   "personne_id": "dirigeant:2028916"
   }
  ],
  "indisponibles": {
