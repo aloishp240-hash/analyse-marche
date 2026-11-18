@@ -1,0 +1,51 @@
+{
+  "jour": "2026-11-17",
+  "session_reussie": true,
+  "candidats": [
+    {
+      "ticker": "MRNA",
+      "nom": "Moderna",
+      "configuration": "A",
+      "cloture": 206.8,
+      "entree": 202.01,
+      "stop": 173.28,
+      "objectif": 259.47,
+      "atr": 19.15,
+      "mm50": 204.39,
+      "date_resultats": "2026-11-06",
+      "avis_claude": null,
+      "motif_claude": null,
+      "ordre_cree": false,
+      "id_ordre": null,
+      "refus_code": []
+    }
+  ],
+  "incoherences": [
+    "MRNA : aucun avis de Claude dans le compte rendu"
+  ],
+  "refus_hors_candidats": [],
+  "fermetures": 0,
+  "cout": {
+    "tours": 6,
+    "duree_s": 15,
+    "cout_usd": 0.1011916,
+    "WebSearch": 0,
+    "WebFetch": 0,
+    "Bash": 3,
+    "Skill": 1
+  },
+  "sources": [
+    {
+      "outil": "Bash",
+      "source": "python outils/notes.py lire; python outils/candidats.py"
+    },
+    {
+      "outil": "Bash",
+      "source": "python outils/actualites.py MRNA; python fiche.py MRNA; python outils/engouement.py MRNA"
+    },
+    {
+      "outil": "Bash",
+      "source": "python outils/notes.py ajouter \"2026-11-17 : Moderna (MRNA) rejeté — +730 % en un an, -17,5 % en 5 jours, MACD baissier, objectif moyen des analystes 165 $ (-20 % sous le cours), JPMorgan juge le titre surévalué, marge nette -110 %, volatilité ~9 %/jour. À revoir si le cours se stabilise au-dessus d"
+    }
+  ]
+}

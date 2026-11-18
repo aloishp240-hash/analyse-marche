@@ -1,8 +1,24 @@
 {
-  "jour": "2026-11-16",
-  "donnees_au": "2026-11-16",
+  "jour": "2026-11-17",
+  "donnees_au": "2026-11-17",
   "entrees_bloquees": [],
   "candidats_non_proposes": [],
   "titres_ecartes": {},
-  "candidats": []
+  "candidats": [
+    {
+      "ticker": "MRNA",
+      "configuration": "A",
+      "cloture": 206.8,
+      "atr": 19.15,
+      "rsi": 44.4,
+      "mm50": 204.39,
+      "force_relative": 26.85,
+      "entree": 202.01,
+      "stop": 173.28,
+      "objectif": 259.47,
+      "industrie": "Biotechnology",
+      "nom": "Moderna",
+      "date_resultats": "2026-11-06"
+    }
+  ]
 }
