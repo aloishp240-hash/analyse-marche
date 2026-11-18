@@ -105,19 +105,6 @@
    "stop_recale": true
   },
   {
-   "ticker": "ENPH",
-   "personne_id": "dirigeant:1543777",
-   "source_id": "form4:0001543777-26-000006:1",
-   "id_ordre": "b83c082f-6f92-425a-8a0f-360a2478dd72",
-   "id_stop": "17413b46-821f-453f-b421-48b2c88c620f",
-   "date_entree": "2026-11-03",
-   "date_operation": "2026-11-02",
-   "stop": 24.2505,
-   "quantite": 10,
-   "sortie_prevue": "2027-05-03",
-   "stop_recale": true
-  },
-  {
    "ticker": "COHR",
    "personne_id": "dirigeant:1644651",
    "source_id": "form4:0000899140-26-001276:1",
@@ -129,6 +116,19 @@
    "quantite": 1,
    "sortie_prevue": "2027-05-13",
    "stop_recale": true
+  },
+  {
+   "ticker": "PAM",
+   "personne_id": "dirigeant:2022936",
+   "source_id": "form4:0002022936-26-000018:1",
+   "id_ordre": "7eb89343-3d4a-41dd-a887-6ec842e2e49d",
+   "id_stop": "b96df541-d0ec-4d24-ba85-a702138fad99",
+   "date_entree": "2026-11-18",
+   "date_operation": "2026-11-12",
+   "stop": 53.184499740600586,
+   "quantite": 4,
+   "sortie_prevue": "2027-05-18",
+   "stop_recale": false
   }
  ],
  "historique": [
@@ -164,6 +164,17 @@
    "prix_entree": 43.98,
    "prix_sortie": 44.04,
    "quantite": 7
+  },
+  {
+   "ticker": "ENPH",
+   "personne_id": "dirigeant:1543777",
+   "source_id": "form4:0001543777-26-000006:1",
+   "date_entree": "2026-11-03",
+   "date_sortie": "2026-11-18",
+   "raison": "stop",
+   "prix_entree": 28.53,
+   "prix_sortie": 24.21,
+   "quantite": 10
   }
  ]
 }
