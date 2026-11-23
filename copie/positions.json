@@ -14,19 +14,6 @@
    "stop_recale": true
   },
   {
-   "ticker": "MSM",
-   "personne_id": "dirigeant:1008015",
-   "source_id": "form4:0000950142-26-002870:2",
-   "id_ordre": "9183f784-afd8-4a9f-8f56-6f43edb81f2f",
-   "id_stop": "99a2885a-e664-4b32-9eef-50459a7f0f1d",
-   "date_entree": "2026-10-28",
-   "date_operation": "2026-10-23",
-   "stop": 103.4705,
-   "quantite": 2,
-   "sortie_prevue": "2027-04-28",
-   "stop_recale": true
-  },
-  {
    "ticker": "LRN",
    "personne_id": "dirigeant:1684185",
    "source_id": "form4:0001213900-26-113031:3",
@@ -105,19 +92,6 @@
    "stop_recale": true
   },
   {
-   "ticker": "COHR",
-   "personne_id": "dirigeant:1644651",
-   "source_id": "form4:0000899140-26-001276:1",
-   "id_ordre": "ada4de46-fcd7-4b42-be7a-c3ce742880a3",
-   "id_stop": "5653f6a6-25cd-4e89-b7d1-8f5a70ea8bb1",
-   "date_entree": "2026-11-13",
-   "date_operation": "2026-11-09",
-   "stop": 196.3925,
-   "quantite": 1,
-   "sortie_prevue": "2027-05-13",
-   "stop_recale": true
-  },
-  {
    "ticker": "PAM",
    "personne_id": "dirigeant:2022936",
    "source_id": "form4:0002022936-26-000018:1",
@@ -129,6 +103,32 @@
    "quantite": 4,
    "sortie_prevue": "2027-05-18",
    "stop_recale": true
+  },
+  {
+   "ticker": "SEI",
+   "personne_id": "dirigeant:1714868",
+   "source_id": "form4:0001628280-26-075233:1",
+   "id_ordre": "f1147dbf-9b07-4b9d-9a70-1a4c58c69e9d",
+   "id_stop": "57ee4538-5ac4-442d-b7cb-c30333d934c6",
+   "date_entree": "2026-11-23",
+   "date_operation": "2026-11-20",
+   "stop": 52.4875,
+   "quantite": 4,
+   "sortie_prevue": "2027-05-23",
+   "stop_recale": false
+  },
+  {
+   "ticker": "GLXY",
+   "personne_id": "dirigeant:1380615",
+   "source_id": "form4:0001380615-26-000016:1",
+   "id_ordre": "cc157b94-7f5f-4cf1-8de1-d0407307c4de",
+   "id_stop": "867f017e-6ea2-43ae-a11c-dba31191857b",
+   "date_entree": "2026-11-23",
+   "date_operation": "2026-11-20",
+   "stop": 11.088250064849854,
+   "quantite": 20,
+   "sortie_prevue": "2027-05-23",
+   "stop_recale": false
   }
  ],
  "historique": [
@@ -175,6 +175,28 @@
    "prix_entree": 28.53,
    "prix_sortie": 24.21,
    "quantite": 10
+  },
+  {
+   "ticker": "MSM",
+   "personne_id": "dirigeant:1008015",
+   "source_id": "form4:0000950142-26-002870:2",
+   "date_entree": "2026-10-28",
+   "date_sortie": "2026-11-23",
+   "raison": "stop",
+   "prix_entree": 121.73,
+   "prix_sortie": 103.38,
+   "quantite": 2
+  },
+  {
+   "ticker": "COHR",
+   "personne_id": "dirigeant:1644651",
+   "source_id": "form4:0000899140-26-001276:1",
+   "date_entree": "2026-11-13",
+   "date_sortie": "2026-11-23",
+   "raison": "stop",
+   "prix_entree": 231.05,
+   "prix_sortie": 196.22,
+   "quantite": 1
   }
  ]
 }

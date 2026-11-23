@@ -1,5 +1,5 @@
 {
- "dernier_passage": "2026-11-19",
+ "dernier_passage": "2026-11-20",
  "vus": {
   "13f:0000919574-26-007862": "2026-11-16"
  },
@@ -11,28 +11,13 @@
   },
   {
    "ticker": "SRRK",
-   "date": "2026-10-23",
-   "personne_id": "dirigeant:1253170"
-  },
-  {
-   "ticker": "SRRK",
    "date": "2026-10-26",
    "personne_id": "dirigeant:1253170"
   },
   {
    "ticker": "LRN",
-   "date": "2026-10-23",
-   "personne_id": "dirigeant:1684185"
-  },
-  {
-   "ticker": "LRN",
    "date": "2026-10-26",
    "personne_id": "dirigeant:1684185"
-  },
-  {
-   "ticker": "MSM",
-   "date": "2026-10-23",
-   "personne_id": "dirigeant:1008015"
   },
   {
    "ticker": "ACN",
@@ -863,6 +848,76 @@
    "ticker": "IRTC",
    "date": "2026-11-19",
    "personne_id": "dirigeant:1316065"
+  },
+  {
+   "ticker": "TEAM",
+   "date": "2026-11-19",
+   "personne_id": "dirigeant:1666120"
+  },
+  {
+   "ticker": "BFH",
+   "date": "2026-11-19",
+   "personne_id": "dirigeant:1869941"
+  },
+  {
+   "ticker": "NTB",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1829065"
+  },
+  {
+   "ticker": "SEI",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1714868"
+  },
+  {
+   "ticker": "ELV",
+   "date": "2026-11-19",
+   "personne_id": "dirigeant:1192045"
+  },
+  {
+   "ticker": "EQPT",
+   "date": "2026-11-19",
+   "personne_id": "dirigeant:2091677"
+  },
+  {
+   "ticker": "TTMI",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1186522"
+  },
+  {
+   "ticker": "MTDR",
+   "date": "2026-11-18",
+   "personne_id": "dirigeant:1540655"
+  },
+  {
+   "ticker": "GLXY",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1380615"
+  },
+  {
+   "ticker": "LEGN",
+   "date": "2026-11-17",
+   "personne_id": "dirigeant:1964342"
+  },
+  {
+   "ticker": "TSM",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:2114032"
+  },
+  {
+   "ticker": "TJX",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1664921"
+  },
+  {
+   "ticker": "SEI",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1705386"
+  },
+  {
+   "ticker": "SEI",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1520378"
   }
  ],
  "indisponibles": {
