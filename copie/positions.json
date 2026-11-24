@@ -109,26 +109,26 @@
    "personne_id": "dirigeant:1714868",
    "source_id": "form4:0001628280-26-075233:1",
    "id_ordre": "f1147dbf-9b07-4b9d-9a70-1a4c58c69e9d",
-   "id_stop": "57ee4538-5ac4-442d-b7cb-c30333d934c6",
+   "id_stop": "fff99fc6-96ec-4958-abe2-1a2fbf67f4f1",
    "date_entree": "2026-11-23",
    "date_operation": "2026-11-20",
-   "stop": 52.4875,
+   "stop": 52.564,
    "quantite": 4,
    "sortie_prevue": "2027-05-23",
-   "stop_recale": false
+   "stop_recale": true
   },
   {
    "ticker": "GLXY",
    "personne_id": "dirigeant:1380615",
    "source_id": "form4:0001380615-26-000016:1",
    "id_ordre": "cc157b94-7f5f-4cf1-8de1-d0407307c4de",
-   "id_stop": "867f017e-6ea2-43ae-a11c-dba31191857b",
+   "id_stop": "a7d3955b-d1bf-4cbf-a3e8-73318fc0af17",
    "date_entree": "2026-11-23",
    "date_operation": "2026-11-20",
-   "stop": 11.088250064849854,
+   "stop": 11.101,
    "quantite": 20,
    "sortie_prevue": "2027-05-23",
-   "stop_recale": false
+   "stop_recale": true
   }
  ],
  "historique": [

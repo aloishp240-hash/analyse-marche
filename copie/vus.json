@@ -1,5 +1,5 @@
 {
- "dernier_passage": "2026-11-20",
+ "dernier_passage": "2026-11-23",
  "vus": {
   "13f:0000919574-26-007862": "2026-11-16"
  },
@@ -918,6 +918,91 @@
    "ticker": "SEI",
    "date": "2026-11-20",
    "personne_id": "dirigeant:1520378"
+  },
+  {
+   "ticker": "ANT",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1221820"
+  },
+  {
+   "ticker": "TEAM",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1666120"
+  },
+  {
+   "ticker": "KYN",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1331674"
+  },
+  {
+   "ticker": "BG",
+   "date": "2026-11-19",
+   "personne_id": "dirigeant:2074676"
+  },
+  {
+   "ticker": "BG",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:2074676"
+  },
+  {
+   "ticker": "SKYD",
+   "date": "2026-11-19",
+   "personne_id": "dirigeant:1447258"
+  },
+  {
+   "ticker": "SKYD",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1447258"
+  },
+  {
+   "ticker": "FPS",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1191461"
+  },
+  {
+   "ticker": "PAM",
+   "date": "2026-11-18",
+   "personne_id": "dirigeant:2028917"
+  },
+  {
+   "ticker": "PAM",
+   "date": "2026-11-19",
+   "personne_id": "dirigeant:2028917"
+  },
+  {
+   "ticker": "PAM",
+   "date": "2026-11-18",
+   "personne_id": "dirigeant:2028916"
+  },
+  {
+   "ticker": "PAM",
+   "date": "2026-11-19",
+   "personne_id": "dirigeant:2028916"
+  },
+  {
+   "ticker": "PAM",
+   "date": "2026-11-18",
+   "personne_id": "dirigeant:2022936"
+  },
+  {
+   "ticker": "PAM",
+   "date": "2026-11-19",
+   "personne_id": "dirigeant:2022936"
+  },
+  {
+   "ticker": "PAM",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:2022936"
+  },
+  {
+   "ticker": "URI",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:2111745"
+  },
+  {
+   "ticker": "WMB",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1405444"
   }
  ],
  "indisponibles": {
