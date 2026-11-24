@@ -46,7 +46,7 @@
   ],
   "decision": null,
   "derniere_decision": "2026-10",
-  "dernier_releve": "2026-11-20",
+  "dernier_releve": "2026-11-23",
   "qqq_depart": 684.260009765625,
   "operations": [
     {
@@ -145,6 +145,11 @@
       "date": "2026-11-17",
       "valeur_eur": 2511.46,
       "qqq_pct": -3.99
+    },
+    {
+      "date": "2026-11-23",
+      "valeur_eur": 2261.87,
+      "qqq_pct": -4.86
     }
   ]
 }
