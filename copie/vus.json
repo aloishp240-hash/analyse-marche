@@ -1,5 +1,5 @@
 {
- "dernier_passage": "2026-11-23",
+ "dernier_passage": "2026-11-24",
  "vus": {
   "13f:0000919574-26-007862": "2026-11-16"
  },
@@ -1003,6 +1003,46 @@
    "ticker": "WMB",
    "date": "2026-11-20",
    "personne_id": "dirigeant:1405444"
+  },
+  {
+   "ticker": "ASTS",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1749229"
+  },
+  {
+   "ticker": "TEAM",
+   "date": "2026-11-23",
+   "personne_id": "dirigeant:1666120"
+  },
+  {
+   "ticker": "OTF",
+   "date": "2026-11-23",
+   "personne_id": "dirigeant:1676100"
+  },
+  {
+   "ticker": "COHR",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1240386"
+  },
+  {
+   "ticker": "MTDR",
+   "date": "2026-11-23",
+   "personne_id": "dirigeant:1540655"
+  },
+  {
+   "ticker": "MKL",
+   "date": "2026-11-23",
+   "personne_id": "dirigeant:1857626"
+  },
+  {
+   "ticker": "SNEX",
+   "date": "2026-11-23",
+   "personne_id": "dirigeant:1620576"
+  },
+  {
+   "ticker": "PLTR",
+   "date": "2026-11-20",
+   "personne_id": "dirigeant:1211060"
   }
  ],
  "indisponibles": {

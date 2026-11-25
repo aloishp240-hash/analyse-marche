@@ -105,30 +105,30 @@
    "stop_recale": true
   },
   {
-   "ticker": "SEI",
-   "personne_id": "dirigeant:1714868",
-   "source_id": "form4:0001628280-26-075233:1",
-   "id_ordre": "f1147dbf-9b07-4b9d-9a70-1a4c58c69e9d",
-   "id_stop": "fff99fc6-96ec-4958-abe2-1a2fbf67f4f1",
-   "date_entree": "2026-11-23",
+   "ticker": "PLTR",
+   "personne_id": "dirigeant:1211060",
+   "source_id": "form4:0001211060-26-000012:2",
+   "id_ordre": "ee7c1315-de36-4647-bb10-6b0756faeec0",
+   "id_stop": "a1ed3be5-bc03-40d5-b739-49658699dfed",
+   "date_entree": "2026-11-25",
    "date_operation": "2026-11-20",
-   "stop": 52.564,
-   "quantite": 4,
-   "sortie_prevue": "2027-05-23",
-   "stop_recale": true
+   "stop": 131.47799377441405,
+   "quantite": 1,
+   "sortie_prevue": "2027-05-25",
+   "stop_recale": false
   },
   {
-   "ticker": "GLXY",
-   "personne_id": "dirigeant:1380615",
-   "source_id": "form4:0001380615-26-000016:1",
-   "id_ordre": "cc157b94-7f5f-4cf1-8de1-d0407307c4de",
-   "id_stop": "a7d3955b-d1bf-4cbf-a3e8-73318fc0af17",
-   "date_entree": "2026-11-23",
+   "ticker": "COHR",
+   "personne_id": "dirigeant:1240386",
+   "source_id": "form4:0000899140-26-001411:3",
+   "id_ordre": "38cb2f32-eece-4342-ab48-4a6905618431",
+   "id_stop": "5421b2e6-1f21-4603-a1a9-26a2a551768f",
+   "date_entree": "2026-11-25",
    "date_operation": "2026-11-20",
-   "stop": 11.101,
-   "quantite": 20,
-   "sortie_prevue": "2027-05-23",
-   "stop_recale": true
+   "stop": 150.06750259399413,
+   "quantite": 1,
+   "sortie_prevue": "2027-05-25",
+   "stop_recale": false
   }
  ],
  "historique": [
@@ -197,6 +197,28 @@
    "prix_entree": 231.05,
    "prix_sortie": 196.22,
    "quantite": 1
+  },
+  {
+   "ticker": "SEI",
+   "personne_id": "dirigeant:1714868",
+   "source_id": "form4:0001628280-26-075233:1",
+   "date_entree": "2026-11-23",
+   "date_sortie": "2026-11-25",
+   "raison": "stop",
+   "prix_entree": 61.84,
+   "prix_sortie": 51.75,
+   "quantite": 4
+  },
+  {
+   "ticker": "GLXY",
+   "personne_id": "dirigeant:1380615",
+   "source_id": "form4:0001380615-26-000016:1",
+   "date_entree": "2026-11-23",
+   "date_sortie": "2026-11-25",
+   "raison": "stop",
+   "prix_entree": 13.06,
+   "prix_sortie": 10.753,
+   "quantite": 20
   }
  ]
 }
