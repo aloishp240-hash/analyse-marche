@@ -109,26 +109,26 @@
    "personne_id": "dirigeant:1211060",
    "source_id": "form4:0001211060-26-000012:2",
    "id_ordre": "ee7c1315-de36-4647-bb10-6b0756faeec0",
-   "id_stop": "a1ed3be5-bc03-40d5-b739-49658699dfed",
+   "id_stop": "1a220d28-63c6-4096-8726-72900d139b6a",
    "date_entree": "2026-11-25",
    "date_operation": "2026-11-20",
-   "stop": 131.47799377441405,
+   "stop": 131.512,
    "quantite": 1,
    "sortie_prevue": "2027-05-25",
-   "stop_recale": false
+   "stop_recale": true
   },
   {
    "ticker": "COHR",
    "personne_id": "dirigeant:1240386",
    "source_id": "form4:0000899140-26-001411:3",
    "id_ordre": "38cb2f32-eece-4342-ab48-4a6905618431",
-   "id_stop": "5421b2e6-1f21-4603-a1a9-26a2a551768f",
+   "id_stop": "eb1aa5e5-ad67-4475-a103-0eba772450d9",
    "date_entree": "2026-11-25",
    "date_operation": "2026-11-20",
-   "stop": 150.06750259399413,
+   "stop": 150.1865,
    "quantite": 1,
    "sortie_prevue": "2027-05-25",
-   "stop_recale": false
+   "stop_recale": true
   }
  ],
  "historique": [
