@@ -122,13 +122,14 @@
    "personne_id": "dirigeant:1240386",
    "source_id": "form4:0000899140-26-001411:3",
    "id_ordre": "38cb2f32-eece-4342-ab48-4a6905618431",
-   "id_stop": "eb1aa5e5-ad67-4475-a103-0eba772450d9",
+   "id_stop": "ebeecdd7-753f-4df4-96f8-225404ecc4fb",
    "date_entree": "2026-11-25",
    "date_operation": "2026-11-20",
-   "stop": 150.1865,
+   "stop": 177.57344999999998,
    "quantite": 1,
    "sortie_prevue": "2027-05-25",
-   "stop_recale": true
+   "stop_recale": true,
+   "be_fait": true
   }
  ],
  "historique": [

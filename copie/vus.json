@@ -1,5 +1,5 @@
 {
- "dernier_passage": "2026-11-25",
+ "dernier_passage": "2026-11-26",
  "vus": {
   "13f:0000919574-26-007862": "2026-11-16"
  },
@@ -10,11 +10,6 @@
    "personne_id": "dirigeant:1561100"
   },
   {
-   "ticker": "FLG",
-   "date": "2026-10-27",
-   "personne_id": "dirigeant:1649471"
-  },
-  {
    "ticker": "TTMI",
    "date": "2026-10-28",
    "personne_id": "dirigeant:1705520"
@@ -23,11 +18,6 @@
    "ticker": "DINO",
    "date": "2026-10-29",
    "personne_id": "dirigeant:1207002"
-  },
-  {
-   "ticker": "HBAN",
-   "date": "2026-10-27",
-   "personne_id": "dirigeant:1251487"
   },
   {
    "ticker": "PNFP",
