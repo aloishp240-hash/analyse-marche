@@ -1,8 +1,10 @@
 {
-  "jour": "2026-11-25",
-  "donnees_au": "2026-11-25",
+  "jour": "2026-11-27",
+  "donnees_au": "2026-11-27",
   "entrees_bloquees": [],
   "candidats_non_proposes": [],
-  "titres_ecartes": {},
+  "titres_ecartes": {
+    "SNDK": "cours du jour incomplet"
+  },
   "candidats": []
 }
